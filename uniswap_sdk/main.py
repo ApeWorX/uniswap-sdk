@@ -7,7 +7,7 @@ from ape.utils import ManagerAccessMixin
 from ape_tokens import Token, TokenInstance
 
 from . import universal_router as ur
-from . import v2
+from . import v2, v3
 from .types import BaseIndex
 from .utils import get_liquidity, get_price
 
@@ -44,7 +44,7 @@ class Uniswap(ManagerAccessMixin):
         self,
         use_v1: bool = False,
         use_v2: bool = True,
-        use_v3: bool = False,
+        use_v3: bool = True,
         use_v4: bool = False,
     ):
         self.router = ur.UniversalRouter()
@@ -58,7 +58,7 @@ class Uniswap(ManagerAccessMixin):
             self.indexers.append(v2.Factory())
 
         if use_v3:
-            raise ValueError("Uniswap v3 not supported yet.")
+            self.indexers.append(v3.Factory())
 
         if use_v4:
             raise ValueError("Uniswap v4 not supported yet.")
