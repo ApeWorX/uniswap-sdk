@@ -53,8 +53,8 @@ setup(
     url="https://github.com/ApeWorX/uniswap-sdk",
     include_package_data=True,
     install_requires=[
-        "eth-ape>=0.8,<1",
-        "ethpm-types>=0.6.11",  # higher peer dep of `eth-ape`, solves typing issue
+        "importlib-metadata ; python_version<'3.8'",
+        "eth-ape>=0.5.3,<1.0",
     ],  # NOTE: Add 3rd party libraries here
     python_requires=">=3.9,<4",
     extras_require=extras_require,
@@ -63,7 +63,7 @@ setup(
     zip_safe=False,
     keywords="ethereum",
     packages=find_packages(exclude=["tests", "tests.*"]),
-    package_data={"uniswap_sdk": ["py.typed", "*.json"]},
+    package_data={"uniswap_sdk": ["py.typed", "v2.json"]},
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
