@@ -1,6 +1,33 @@
-# uniswap-sdk
+# Uniswap SDK
 
-TODO: Description
+**NOTE: Work In Progress**
+
+## Usage
+
+**NOTE: Sketch of potential usage**
+```py
+from ape_tokens import tokens
+from uniswap_sdk import v2 as uni_v2
+
+# Uses v2's TWAP oracle pricing algorithm
+price = uni_v2.price(base=tokens["USDC"], quote=tokens["YFI"])
+print(f"Buying 100k USDC worth of YFI at {price} USDC/YFI")
+
+# Will automatically discover best possible route for given trade on Uniswap v2
+# NOTE: Slippage and timeout are configurable
+uni_v2.swap(base=tokens["USDC"], quote=tokens["YFI"], amount_in="100_000 USDC", sender=trader)
+```
+
+```py
+# Eventual goal?
+import uniswap_sdk as uni
+
+# Finds most liquid price across v2 and v3
+price = uni.price(base=tokens["USDC"], quote=tokens["YFI"])
+
+# Performs best swap between v2 and v3
+uni.swap(base=tokens["USDC"], quote=tokens["YFI"], amount_in="100_000 USDC", sender=trader)
+```
 
 ## Dependencies
 
@@ -21,8 +48,8 @@ pip install uniswap_sdk
 You can clone the repository and use [`setuptools`](https://github.com/pypa/setuptools) for the most up-to-date version:
 
 ```bash
-git clone https://github.com/ApeWorX/<PYPI_NAME>.git
-cd <PYPI_NAME>
+git clone https://github.com/SilverBackLtd/uniswap-sdk.git
+cd uniswap-sdk
 python3 setup.py install
 ```
 
