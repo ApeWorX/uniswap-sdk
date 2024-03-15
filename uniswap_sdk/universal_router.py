@@ -1,0 +1,413 @@
+from typing import Any, Callable, ClassVar, Dict, List, Optional, Type
+
+from ape.api import ReceiptAPI, TransactionAPI
+from ape.exceptions import DecodingError
+from ape.utils import ManagerAccessMixin, StructParser
+from ape_ethereum.ecosystem import parse_type
+from eth_abi import decode, encode
+from eth_abi.exceptions import InsufficientDataBytes
+from ethpm_types.abi import ABIType, MethodABI
+from hexbytes import HexBytes
+from pydantic import BaseModel, field_validator
+
+
+# NOTE: Special constants
+class Constants:
+    # internal constants
+    _ALLOW_REVERT_FLAG = 0x80
+    _COMMAND_TYPE_MASK = 0x3F
+
+    # Used for identifying cases when this contract's balance of a token is to be used as an input
+    CONTRACT_BALANCE = int(2**255)
+    # Used for identifying cases when a v2 pair has already received input tokens
+    ALREADY_PAID = 0
+    # Used as a flag for identifying the transfer of ETH instead of a token
+    ETH = "0x0000000000000000000000000000000000000000"
+    # Used as a flag for identifying that msg.sender should be used
+    MSG_SENDER = "0x0000000000000000000000000000000000000001"
+    # Used as a flag for identifying address(this) should be used
+    ADDRESS_THIS = "0x0000000000000000000000000000000000000002"
+
+
+class Command(BaseModel, ManagerAccessMixin):
+    # NOTE: Define in class defs
+    type: ClassVar[int]
+    definition: ClassVar[List[ABIType]]
+    is_revertible: ClassVar[bool] = False
+
+    # NOTE: For parsing live data
+    inputs: List[Any]
+    allow_revert: bool = False
+
+    @field_validator("inputs")
+    @classmethod
+    def validate_inputs(cls, inputs: List) -> List:
+        if len(inputs) != len(cls.definition):
+            raise ValueError(
+                f"Number of args ({len(inputs)}) does not match definition ({len(cls.definition)})."
+            )
+
+        return inputs
+
+    def __repr__(self) -> str:
+        inputs_str = ", ".join(
+            f"{def_.name}={arg}" for def_, arg in zip(self.definition, self.inputs)
+        )
+        return f"{self.__class__.__name__}({inputs_str})"
+
+    @property
+    def command_byte(self) -> int:
+        return (Constants._ALLOW_REVERT_FLAG if self.allow_revert else 0x0) | self.type
+
+    # TODO: Complete
+    def encode_inputs(self) -> HexBytes:
+        parser = StructParser(MethodABI(name=self.__class__.__name__, inputs=self.inputs))
+        arguments = parser.encode_input(self.inputs)
+        input_types = [i.canonical_type for i in self.definition]
+        python_types = tuple(
+            self.provider.network.ecosystem._python_type_for_abi_type(i) for i in self.definition
+        )
+        converted_args = self.conversion_manager.convert(arguments, python_types)
+        encoded_calldata = encode(input_types, converted_args)
+        return HexBytes(encoded_calldata)
+
+    @classmethod
+    # TODO: Complete
+    def _decode_inputs(cls, calldata: HexBytes) -> List[Any]:
+        raw_input_types = [i.canonical_type for i in cls.definition]
+        input_types = [parse_type(i.model_dump(mode="json")) for i in cls.definition]
+
+        try:
+            raw_input_values = decode(raw_input_types, calldata, strict=False)
+        except InsufficientDataBytes as err:
+            raise DecodingError(str(err)) from err
+
+        return [
+            cls.provider.network.ecosystem.decode_primitive_value(v, t)
+            for v, t in zip(raw_input_values, input_types)
+        ]
+
+    @classmethod
+    def decode(cls, command_byte: int, calldata: HexBytes):
+        command_type = command_byte & Constants._COMMAND_TYPE_MASK
+
+        if command_type not in ALL_COMMANDS_BY_TYPE:
+            raise NotImplementedError(f"Unsupported command type: '{command_type}'")
+
+        cls = ALL_COMMANDS_BY_TYPE[command_type]
+        allow_revert = bool(command_byte & Constants._ALLOW_REVERT_FLAG)
+
+        if allow_revert and not cls.is_revertible:
+            raise ValueError("Command is not reversible but reversibility is set.")
+
+        return cls(inputs=cls._decode_inputs(calldata), allow_revert=allow_revert)
+
+
+class V3_SWAP_EXACT_IN(Command):
+    type = 0x00
+
+    definition = [
+        ABIType(name="recipient", type="address"),
+        ABIType(name="amountIn", type="uint256"),
+        ABIType(name="amountOutMin", type="uint256"),
+        ABIType(name="encodedPath", type="bytes"),
+        ABIType(name="payerIsUser", type="bool"),
+    ]
+
+
+class V3_SWAP_EXACT_OUT(Command):
+    type = 0x01
+
+    definition = [
+        ABIType(name="recipient", type="address"),
+        ABIType(name="amountOut", type="uint256"),
+        ABIType(name="amountInMax", type="uint256"),
+        ABIType(name="encodedPath", type="bytes"),
+        ABIType(name="payerIsUser", type="bool"),
+    ]
+
+
+class PERMIT2_TRANSFER_FROM(Command):
+    type = 0x02
+
+    definition = [
+        ABIType(name="token", type="address"),
+        ABIType(name="recipient", type="address"),
+        ABIType(name="amount", type="uint256"),
+    ]
+
+
+# class PERMIT2_PERMIT_BATCH(Command):
+#     type = 0x03
+#
+#     definition = []
+
+
+class SWEEP(Command):
+    type = 0x04
+
+    definition = [
+        ABIType(name="token", type="address"),
+        ABIType(name="recipient", type="address"),
+        ABIType(name="amountMin", type="uint256"),
+    ]
+
+
+class TRANSFER(Command):
+    type = 0x05
+
+    definition = [
+        ABIType(name="token", type="address"),
+        ABIType(name="recipient", type="address"),
+        ABIType(name="amount", type="uint256"),
+    ]
+
+
+class PAY_PORTION(Command):
+    type = 0x06
+
+    definition = [
+        ABIType(name="token", type="address"),
+        ABIType(name="recipient", type="address"),
+        ABIType(name="bips", type="uint256"),
+    ]
+
+
+class V2_SWAP_EXACT_IN(Command):
+    type = 0x08
+
+    definition = [
+        ABIType(name="recipient", type="address"),
+        ABIType(name="amountIn", type="uint256"),
+        ABIType(name="amountOutMin", type="uint256"),
+        ABIType(name="path", type="address[]"),
+        ABIType(name="payerIsUser", type="bool"),
+    ]
+
+
+class V2_SWAP_EXACT_OUT(Command):
+    type = 0x09
+
+    definition = [
+        ABIType(name="recipient", type="address"),
+        ABIType(name="amountOut", type="uint256"),
+        ABIType(name="amountInMax", type="uint256"),
+        ABIType(name="path", type="address[]"),
+        ABIType(name="payerIsUser", type="bool"),
+    ]
+
+
+# class PERMIT2_PERMIT(Command):
+#     type = 0x0A
+#
+#     definition = []
+
+
+class WRAP_ETH(Command):
+    type = 0x0B
+
+    definition = [
+        ABIType(name="recipient", type="address"),
+        ABIType(name="amountMin", type="uint256"),
+    ]
+
+
+class UNWRAP_WETH(Command):
+    type = 0x0C
+
+    definition = [
+        ABIType(name="recipient", type="address"),
+        ABIType(name="amountMin", type="uint256"),
+    ]
+
+
+class PERMIT2_TRANSFER_FROM_BATCH(Command):
+    type = 0x0D
+
+    definition = []
+
+
+class BALANCE_CHECK_ERC20(Command):
+    type = 0x0E
+
+    definition = [
+        ABIType(name="owner", type="address"),
+        ABIType(name="token", type="address"),
+        ABIType(name="minBalance", type="uint256"),
+    ]
+
+
+# class SEAPORT_V1_5(Command):
+#     type = 0x10
+#
+#     definition = []
+
+
+# class LOOKS_RARE_721(Command):
+#     type = 0x11
+#
+#     definition = []
+
+
+# class NFTX(Command):
+#     type = 0x12
+#
+#     definition = []
+
+
+# class CRYPTOPUNKS(Command):
+#     type = 0x13
+#
+#     definition = []
+
+
+# class LOOKS_RARE_1155(Command):
+#     type = 0x14
+#
+#     definition = []
+
+
+# class OWNER_CHECK_721(Command):
+#     type = 0x15
+#
+#     definition = []
+
+
+# class OWNER_CHECK_1155(Command):
+#     type = 0x16
+#
+#     definition = []
+
+
+# class SWEEP_ERC721(Command):
+#     type = 0x17
+#
+#     definition = []
+
+
+# class X2Y2_721(Command):
+#     type = 0x18
+#
+#     definition = []
+
+
+# class SUDOSWAP(Command):
+#     type = 0x19
+#
+#     definition = []
+
+
+# class NFT20(Command):
+#     type = 0x1A
+#
+#     definition = []
+
+
+# class X2Y2_1155(Command):
+#     type = 0x1B
+#
+#     definition = []
+
+
+# class FOUNDATION(Command):
+#     type = 0x1C
+#
+#     definition = []
+
+
+# class SWEEP_ERC1155(Command):
+#     type = 0x1D
+#
+#     definition = []
+
+
+# class ELEMENT_MARKET(Command):
+#     type = 0x1E
+#
+#     definition = []
+
+
+# class SEAPORT_V1_4(Command):
+#     type = 0x20
+#
+#     definition = []
+
+
+# class EXECUTE_SUB_PLAN(Command):
+#     type = 0x21
+#
+#     definition = []
+
+
+# class APPROVE_ERC20(Command):
+#     type = 0x22
+#
+#     definition = []
+
+
+# NOTE: Must come after all the subclassing action above
+ALL_COMMANDS_BY_TYPE: Dict[int, Type[Command]] = {cls.type: cls for cls in Command.__subclasses__()}
+ALL_COMMANDS_BY_NAME: Dict[str, Type[Command]] = {
+    cls.__name__: cls for cls in Command.__subclasses__()
+}
+
+
+class Plan(BaseModel):
+    commands: List[Command] = []
+
+    @classmethod
+    def decode(cls, encoded_commands: HexBytes, encoded_inputs: List[HexBytes]) -> "Plan":
+        return cls(
+            commands=[
+                Command.decode(command_byte, encoded_args)
+                for command_byte, encoded_args in zip(encoded_commands, encoded_inputs)
+            ]
+        )
+
+    def add(self, command: Command) -> "Plan":
+        self.commands.append(command)
+        return self
+
+    @property
+    def encoded_commands(self) -> HexBytes:
+        return HexBytes(bytearray([cmd.command_byte for cmd in self.commands]))
+
+    def encode_inputs(self) -> List[HexBytes]:
+        return [cmd.encode_inputs() for cmd in self.commands]
+
+    def __getattr__(self, command_name: str) -> Callable[[Any], "Plan"]:
+        if command_name.upper() not in ALL_COMMANDS_BY_NAME:
+            raise AttributeError(f"Unsupported command type: '{command_name.upper()}'.")
+
+        command_cls = ALL_COMMANDS_BY_NAME[command_name.upper()]
+
+        def add_command(*args, **kwargs):
+            return self.add(command_cls(inputs=args, **kwargs))
+
+        return add_command
+
+
+class UniversalRouter:
+    def decode_plan_from_transaction(self, txn: TransactionAPI) -> Plan:
+        if txn.receiver != self.contract.address:
+            raise
+
+        return self.decode_raw_plan(HexBytes(txn.data))
+
+    def decode_plan_from_calldata(self, calldata: HexBytes) -> Plan:
+        encoded_commands, encoded_inputs, _ = self.contract.execute.decode_args(calldata)
+
+        return Plan(
+            commands=[
+                Command.parse_command(raw_byte, encoded_args)
+                for raw_byte, encoded_args in zip(encoded_commands, encoded_inputs)
+            ]
+        )
+
+    def execute(self, plan: Plan, deadline: Optional[int] = None, **txn_args) -> ReceiptAPI:
+        if deadline is None:
+            return self.contract.execute(plan.encoded_commands, plan.encoded_inputs, **txn_args)
+
+        return self.contract.execute(
+            plan.encoded_commands, plan.encoded_inputs, deadline, **txn_args
+        )
