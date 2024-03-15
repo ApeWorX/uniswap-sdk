@@ -4,16 +4,16 @@ from setuptools import find_packages, setup  # type: ignore
 
 extras_require = {
     "test": [  # `test` GitHub Action jobs uses this
-        "pytest>=6.0,<7.0",  # Core testing package
+        "pytest>=6.0,<8",  # Core testing package
         "pytest-xdist",  # multi-process runner
         "pytest-cov",  # Coverage analyzer plugin
-        "hypothesis>=6.2.0,<7.0",  # Strategy-based fuzzer
+        "hypothesis>=6.2.0,<7",  # Strategy-based fuzzer
     ],
     "lint": [
-        "black>=21.10b0,<22.0",  # auto-formatter and linter
-        "mypy>=0.910,<1.0",  # Static type analyzer
-        "flake8>=3.8.3,<4.0",  # Style linter
-        "isort>=5.9.3,<6.0",  # Import sorting linter
+        "black>=24.2.0,<25",  # auto-formatter and linter
+        "mypy>=1.8.0,<2",  # Static type analyzer
+        "flake8>=7.0,<8",  # Style linter
+        "isort>=5.10,<6",  # Import sorting linter
     ],
     "release": [  # `release` GitHub Action job uses this
         "setuptools",  # Installation tool
@@ -21,7 +21,7 @@ extras_require = {
         "twine",  # Package upload tool
     ],
     "dev": [
-        "commitizen>=2.19,<2.20",  # Manage commits and publishing releases
+        "commitizen>=2.40,<3",  # Manage commits and publishing releases
         "pre-commit",  # Ensure that linters are run prior to commiting
         "pytest-watch",  # `ptw` test watcher/runner
         "IPython",  # Console for interacting
@@ -53,10 +53,9 @@ setup(
     url="https://github.com/ApeWorX/uniswap-sdk",
     include_package_data=True,
     install_requires=[
-        "importlib-metadata ; python_version<'3.8'",
-        "eth-ape>=0.2.3,<0.3.0",
+        "eth-ape>=0.7.8,<0.8.0",
     ],  # NOTE: Add 3rd party libraries here
-    python_requires=">=3.7.2,<4",
+    python_requires=">=3.8,<4",
     extras_require=extras_require,
     py_modules=["uniswap_sdk"],
     license="Apache-2.0",
