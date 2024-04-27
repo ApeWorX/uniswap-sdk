@@ -136,14 +136,27 @@ class PERMIT2_TRANSFER_FROM(Command):
     definition = [
         ABIType(name="token", type="address"),
         ABIType(name="recipient", type="address"),
-        ABIType(name="amount", type="uint256"),
+        ABIType(name="amount", type="uint160"),
     ]
 
 
-# class PERMIT2_PERMIT_BATCH(Command):
-#     type = 0x03
-#
-#     definition = []
+class PERMIT2_PERMIT_BATCH(Command):
+    type = 0x03
+
+    definition = [
+        ABIType(
+            name="details",
+            type="tuple[]",
+            components=[
+                ABIType(name="token", type="address"),
+                ABIType(name="amount", type="uint160"),
+                ABIType(name="expiration", type="uint48"),
+                ABIType(name="nonce", type="uint48"),
+            ],
+        ),
+        ABIType(name="spender", type="address"),
+        ABIType(name="deadline", type="uint256"),
+    ]
 
 
 class SWEEP(Command):
@@ -200,10 +213,23 @@ class V2_SWAP_EXACT_OUT(Command):
     ]
 
 
-# class PERMIT2_PERMIT(Command):
-#     type = 0x0A
-#
-#     definition = []
+class PERMIT2_PERMIT(Command):
+    type = 0x0A
+
+    definition = [
+        ABIType(
+            name="details",
+            type="tuple",
+            components=[
+                ABIType(name="token", type="address"),
+                ABIType(name="amount", type="uint160"),
+                ABIType(name="expiration", type="uint48"),
+                ABIType(name="nonce", type="uint48"),
+            ],
+        ),
+        ABIType(name="spender", type="address"),
+        ABIType(name="deadline", type="uint256"),
+    ]
 
 
 class WRAP_ETH(Command):
@@ -227,7 +253,18 @@ class UNWRAP_WETH(Command):
 class PERMIT2_TRANSFER_FROM_BATCH(Command):
     type = 0x0D
 
-    definition = []
+    definition = [
+        ABIType(
+            name="batch",
+            type="tuple[]",
+            components=[
+                ABIType(name="sender", type="address"),
+                ABIType(name="recipient", type="address"),
+                ABIType(name="amount", type="uint160"),
+                ABIType(name="token", type="address"),
+            ],
+        )
+    ]
 
 
 class BALANCE_CHECK_ERC20(Command):
@@ -240,112 +277,174 @@ class BALANCE_CHECK_ERC20(Command):
     ]
 
 
-# class SEAPORT_V1_5(Command):
-#     type = 0x10
-#
-#     definition = []
+class SEAPORT_V1_5(Command):
+    type = 0x10
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+    ]
 
 
-# class LOOKS_RARE_721(Command):
-#     type = 0x11
-#
-#     definition = []
+class LOOKS_RARE_V2(Command):
+    type = 0x11
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+    ]
 
 
-# class NFTX(Command):
-#     type = 0x12
-#
-#     definition = []
+class NFTX(Command):
+    type = 0x12
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+    ]
 
 
-# class CRYPTOPUNKS(Command):
-#     type = 0x13
-#
-#     definition = []
+class CRYPTOPUNKS(Command):
+    type = 0x13
+
+    definition = [
+        ABIType(name="punk_id", type="uint256"),
+        ABIType(name="recipient", type="address"),
+        ABIType(name="value", type="uint256"),
+    ]
 
 
-# class LOOKS_RARE_1155(Command):
-#     type = 0x14
-#
-#     definition = []
+class OWNER_CHECK_721(Command):
+    type = 0x15
+
+    definition = [
+        ABIType(name="owner", type="address"),
+        ABIType(name="token", type="address"),
+        ABIType(name="token_id", type="uint256"),
+    ]
 
 
-# class OWNER_CHECK_721(Command):
-#     type = 0x15
-#
-#     definition = []
+class OWNER_CHECK_1155(Command):
+    type = 0x16
+
+    definition = [
+        ABIType(name="owner", type="address"),
+        ABIType(name="token", type="address"),
+        ABIType(name="token_id", type="uint256"),
+        ABIType(name="min_balance", type="uint256"),
+    ]
 
 
-# class OWNER_CHECK_1155(Command):
-#     type = 0x16
-#
-#     definition = []
+class SWEEP_ERC721(Command):
+    type = 0x17
+
+    definition = [
+        ABIType(name="token", type="address"),
+        ABIType(name="recipient", type="address"),
+        ABIType(name="token_id", type="uint256"),
+    ]
 
 
-# class SWEEP_ERC721(Command):
-#     type = 0x17
-#
-#     definition = []
+class X2Y2_721(Command):
+    type = 0x18
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+        ABIType(name="recipient", type="address"),
+        ABIType(name="token", type="address"),
+        ABIType(name="token_id", type="uint256"),
+    ]
 
 
-# class X2Y2_721(Command):
-#     type = 0x18
-#
-#     definition = []
+class SUDOSWAP(Command):
+    type = 0x19
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+    ]
 
 
-# class SUDOSWAP(Command):
-#     type = 0x19
-#
-#     definition = []
+class NFT20(Command):
+    type = 0x1A
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+    ]
 
 
-# class NFT20(Command):
-#     type = 0x1A
-#
-#     definition = []
+class X2Y2_1155(Command):
+    type = 0x1B
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+        ABIType(name="recipient", type="address"),
+        ABIType(name="token", type="address"),
+        ABIType(name="token_id", type="uint256"),
+        ABIType(name="amount", type="uint256"),
+    ]
 
 
-# class X2Y2_1155(Command):
-#     type = 0x1B
-#
-#     definition = []
+class FOUNDATION(Command):
+    type = 0x1C
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+        ABIType(name="recipient", type="address"),
+        ABIType(name="token", type="address"),
+        ABIType(name="token_id", type="uint256"),
+    ]
 
 
-# class FOUNDATION(Command):
-#     type = 0x1C
-#
-#     definition = []
+class SWEEP_ERC1155(Command):
+    type = 0x1D
+
+    definition = [
+        ABIType(name="token", type="address"),
+        ABIType(name="recipient", type="address"),
+        ABIType(name="token_id", type="uint256"),
+        ABIType(name="amount", type="uint256"),
+    ]
 
 
-# class SWEEP_ERC1155(Command):
-#     type = 0x1D
-#
-#     definition = []
+class ELEMENT_MARKET(Command):
+    type = 0x1E
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+    ]
 
 
-# class ELEMENT_MARKET(Command):
-#     type = 0x1E
-#
-#     definition = []
+class SEAPORT_V1_4(Command):
+    type = 0x20
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+    ]
 
 
-# class SEAPORT_V1_4(Command):
-#     type = 0x20
-#
-#     definition = []
+class EXECUTE_SUB_PLAN(Command):
+    type = 0x21
+
+    definition = [
+        ABIType(name="commands", type="bytes"),
+        ABIType(name="inputs", type="bytes[]"),
+    ]
 
 
-# class EXECUTE_SUB_PLAN(Command):
-#     type = 0x21
-#
-#     definition = []
+class APPROVE_ERC20(Command):
+    type = 0x22
 
-
-# class APPROVE_ERC20(Command):
-#     type = 0x22
-#
-#     definition = []
+    definition = [
+        ABIType(name="token", type="address"),
+        ABIType(name="spender", type="uint8"),  # 0 = opensea condiut, 1 = sudoswap
+    ]
 
 
 # NOTE: Must come after all the subclassing action above
