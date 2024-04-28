@@ -375,7 +375,7 @@ class Plan(BaseModel):
     def encode_inputs(self) -> List[HexBytes]:
         return [cmd.encode_inputs() for cmd in self.commands]
 
-    def __getattr__(self, command_name: str) -> Callable[[Any], "Plan"]:
+    def __getattr__(self, command_name: str) -> Callable[..., "Plan"]:
         if command_name.upper() not in ALL_COMMANDS_BY_NAME:
             raise AttributeError(f"Unsupported command type: '{command_name.upper()}'.")
 
