@@ -1,3 +1,4 @@
+from itertools import cycle
 from typing import Any, Callable, ClassVar, Dict, Iterable, List, Optional, Type
 
 from ape.api import ReceiptAPI, TransactionAPI
@@ -9,6 +10,7 @@ from ape_ethereum.ecosystem import parse_type
 from eth_abi import decode as abi_decode
 from eth_abi import encode as abi_encode
 from eth_abi.exceptions import InsufficientDataBytes
+from eth_abi.packed import encode_packed
 from ethpm_types.abi import ABIType, MethodABI
 from hexbytes import HexBytes
 from pydantic import BaseModel, field_validator
@@ -97,16 +99,34 @@ class Command(BaseModel, ManagerAccessMixin):
         if command_type not in ALL_COMMANDS_BY_TYPE:
             raise NotImplementedError(f"Unsupported command type: '{command_type}'")
 
-        cls = ALL_COMMANDS_BY_TYPE[command_type]
+        command_cls = ALL_COMMANDS_BY_TYPE[command_type]
         allow_revert = bool(command_byte & Constants._ALLOW_REVERT_FLAG)
 
-        if allow_revert and not cls.is_revertible:
+        if allow_revert and not command_cls.is_revertible:
             raise ValueError("Command is not reversible but reversibility is set.")
 
-        return cls(inputs=cls._decode_inputs(calldata), allow_revert=allow_revert)
+        return command_cls(inputs=command_cls._decode_inputs(calldata), allow_revert=allow_revert)
 
 
-class V3_SWAP_EXACT_IN(Command):
+def encode_path(path: List) -> bytes:
+    if len(path) % 2 != 1:
+        ValueError("Path must be an odd-length sequence of token, fee rate, token, ...")
+
+    types = [type for _, type in zip(path, cycle(["address", "uint24"]))]
+    return encode_packed(types, path)
+
+
+class _V3_EncodePathInput:
+    @field_validator("inputs", mode="before")
+    @classmethod
+    def encode_path_input(cls, inputs: List) -> List:
+        if isinstance(inputs[3], list):
+            inputs[3] = encode_path(inputs[3])
+
+        return inputs
+
+
+class V3_SWAP_EXACT_IN(_V3_EncodePathInput, Command):
     type = 0x00
 
     definition = [
@@ -118,7 +138,7 @@ class V3_SWAP_EXACT_IN(Command):
     ]
 
 
-class V3_SWAP_EXACT_OUT(Command):
+class V3_SWAP_EXACT_OUT(_V3_EncodePathInput, Command):
     type = 0x01
 
     definition = [
