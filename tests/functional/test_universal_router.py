@@ -18,7 +18,9 @@ from uniswap_sdk.universal_router import Plan
     ],
 )
 def test_decode_plan(encoded_plan_commands, encoded_plan_inputs, sdk_plan):
-    encoded_plan_commands,  encoded_plan_inputs = HexBytes(encoded_plan_commands), list(HexBytes(i) for i in encoded_plan_inputs)
+    encoded_plan_commands, encoded_plan_inputs = HexBytes(encoded_plan_commands), list(
+        HexBytes(i) for i in encoded_plan_inputs
+    )
     decoded_plan = Plan.decode(encoded_plan_commands, encoded_plan_inputs)
 
     assert decoded_plan == sdk_plan
