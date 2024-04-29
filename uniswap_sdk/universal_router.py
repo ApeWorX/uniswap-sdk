@@ -1,8 +1,10 @@
 from typing import Any, Callable, ClassVar, Dict, List, Optional, Type
 
 from ape.api import ReceiptAPI, TransactionAPI
+from ape.contracts import ContractInstance
 from ape.exceptions import DecodingError
-from ape.utils import ManagerAccessMixin, StructParser
+from ape.managers import ManagerAccessMixin, ProjectManager
+from ape.utils import StructParser, cached_property
 from ape_ethereum.ecosystem import parse_type
 from eth_abi import decode, encode
 from eth_abi.exceptions import InsufficientDataBytes
@@ -387,27 +389,50 @@ class Plan(BaseModel):
         return add_command
 
 
-class UniversalRouter:
-    def decode_plan_from_transaction(self, txn: TransactionAPI) -> Plan:
-        if txn.receiver != self.contract.address:
-            raise
+class UniversalRouter(ManagerAccessMixin):
+    @classmethod
+    def load_project(cls) -> ProjectManager:
+        raise NotImplementedError
 
-        return self.decode_raw_plan(HexBytes(txn.data))
+    @cached_property
+    def project(self) -> ProjectManager:
+        return self.__class__.load_project()
+
+    @cached_property
+    def contract(self) -> ContractInstance:
+        raise NotImplementedError
+
+    @classmethod
+    def inject(cls, *deploy_args, **tx_args) -> "UniversalRouter":
+        self = cls()
+        # NOTE: Override the cached property value since we are creating it manually
+        self.contract = self.project.UniversalRouter.deploy(*deploy_args, **tx_args)
+        return self
 
     def decode_plan_from_calldata(self, calldata: HexBytes) -> Plan:
         encoded_commands, encoded_inputs, _ = self.contract.execute.decode_args(calldata)
+        return Plan.decode(encoded_commands, encoded_inputs)
 
-        return Plan(
-            commands=[
-                Command.parse_command(raw_byte, encoded_args)
-                for raw_byte, encoded_args in zip(encoded_commands, encoded_inputs)
-            ]
-        )
+    def decode_plan_from_transaction(self, txn: TransactionAPI) -> Plan:
+        if txn.receiver != self.contract.address:
+            raise ValueError("Cannot decode plan from transaction to different contract.")
 
-    def execute(self, plan: Plan, deadline: Optional[int] = None, **txn_args) -> ReceiptAPI:
-        if deadline is None:
-            return self.contract.execute(plan.encoded_commands, plan.encoded_inputs, **txn_args)
+        return self.decode_plan_from_calldata(HexBytes(txn.data))
 
-        return self.contract.execute(
-            plan.encoded_commands, plan.encoded_inputs, deadline, **txn_args
-        )
+    def create_transaction_from_plan(
+        self, plan: Plan, deadline: Optional[int] = None, **txn_args
+    ) -> TransactionAPI:
+        args: List[Any] = [plan.encoded_commands, plan.encode_inputs()]
+
+        if deadline is not None:
+            args.append(deadline)
+
+        return self.contract.execute.as_transaction(*args, **txn_args)
+
+    def execute_plan(self, plan: Plan, deadline: Optional[int] = None, **txn_args) -> ReceiptAPI:
+        args: List[Any] = [plan.encoded_commands, plan.encode_inputs()]
+
+        if deadline is not None:
+            args.append(deadline)
+
+        return self.contract.execute(*args, **txn_args)
