@@ -1,4 +1,4 @@
-from typing import Any, Callable, ClassVar, Dict, List, Optional, Type
+from typing import Any, Callable, ClassVar, Dict, Iterable, List, Optional, Type
 
 from ape.api import ReceiptAPI, TransactionAPI
 from ape.contracts import ContractInstance
@@ -6,7 +6,8 @@ from ape.exceptions import DecodingError
 from ape.managers import ManagerAccessMixin, ProjectManager
 from ape.utils import StructParser, cached_property
 from ape_ethereum.ecosystem import parse_type
-from eth_abi import decode, encode
+from eth_abi import decode as abi_decode
+from eth_abi import encode as abi_encode
 from eth_abi.exceptions import InsufficientDataBytes
 from ethpm_types.abi import ABIType, MethodABI
 from hexbytes import HexBytes
@@ -61,26 +62,26 @@ class Command(BaseModel, ManagerAccessMixin):
     def command_byte(self) -> int:
         return (Constants._ALLOW_REVERT_FLAG if self.allow_revert else 0x0) | self.type
 
-    # TODO: Complete
     def encode_inputs(self) -> HexBytes:
-        parser = StructParser(MethodABI(name=self.__class__.__name__, inputs=self.inputs))
+        parser = StructParser(
+            MethodABI(name=self.__class__.__name__, inputs=self.__class__.definition)
+        )
         arguments = parser.encode_input(self.inputs)
         input_types = [i.canonical_type for i in self.definition]
         python_types = tuple(
             self.provider.network.ecosystem._python_type_for_abi_type(i) for i in self.definition
         )
         converted_args = self.conversion_manager.convert(arguments, python_types)
-        encoded_calldata = encode(input_types, converted_args)
+        encoded_calldata = abi_encode(input_types, converted_args)
         return HexBytes(encoded_calldata)
 
     @classmethod
-    # TODO: Complete
     def _decode_inputs(cls, calldata: HexBytes) -> List[Any]:
         raw_input_types = [i.canonical_type for i in cls.definition]
         input_types = [parse_type(i.model_dump(mode="json")) for i in cls.definition]
 
         try:
-            raw_input_values = decode(raw_input_types, calldata, strict=False)
+            raw_input_values = abi_decode(raw_input_types, calldata, strict=False)
         except InsufficientDataBytes as err:
             raise DecodingError(str(err)) from err
 
@@ -358,7 +359,7 @@ class Plan(BaseModel):
     commands: List[Command] = []
 
     @classmethod
-    def decode(cls, encoded_commands: HexBytes, encoded_inputs: List[HexBytes]) -> "Plan":
+    def decode(cls, encoded_commands: HexBytes, encoded_inputs: Iterable[HexBytes]) -> "Plan":
         return cls(
             commands=[
                 Command.decode(command_byte, encoded_args)
