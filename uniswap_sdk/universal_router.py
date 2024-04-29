@@ -457,6 +457,37 @@ class EXECUTE_SUB_PLAN(Command):
         ABIType(name="inputs", type="bytes[]"),
     ]
 
+    @field_validator("inputs", mode="before")
+    @classmethod
+    def encode_sub_plan(cls, sub_plan: Union[List, List[Command], "Plan"]) -> List:
+        if (
+            isinstance(sub_plan, list)
+            and len(sub_plan) > 0
+            and all(isinstance(e, Plan) for e in sub_plan)
+        ):
+            sub_plan = Plan(commands=sub_plan)
+
+        # NOTE: Intentionally execute this if above is true
+        if isinstance(sub_plan, Plan):
+            return [sub_plan.encoded_commands, sub_plan.encode_inputs()]
+
+        return sub_plan  # should be raw sub plan otherwise (validator check)
+
+    @property
+    def decoded_sub_plan(self) -> "Plan":
+        return Plan.decode(self.inputs[0], self.inputs[1])
+
+    def add_step(self, command: Command):
+        self.inputs[0] += command.command_byte
+        self.inputs[1].append(command.encode_inputs())
+
+    def rm_step(self):
+        if len(self.inputs[0]) == 0:
+            raise ValueError("No more items to pop.")
+
+        self.inputs[0] = self.inputs[0][:-1]
+        self.inputs[1].poplast()
+
 
 class APPROVE_ERC20(Command):
     type = 0x22
