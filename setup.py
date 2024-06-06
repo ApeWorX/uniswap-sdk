@@ -4,16 +4,16 @@ from setuptools import find_packages, setup  # type: ignore
 
 extras_require = {
     "test": [  # `test` GitHub Action jobs uses this
-        "pytest>=6.0,<8",  # Core testing package
+        "pytest",  # Core testing package
         "pytest-xdist",  # multi-process runner
         "pytest-cov",  # Coverage analyzer plugin
-        "hypothesis>=6.2.0,<7",  # Strategy-based fuzzer
+        "hypothesis",  # Strategy-based fuzzer
     ],
     "lint": [
-        "black>=24.2.0,<25",  # auto-formatter and linter
-        "mypy>=1.8.0,<2",  # Static type analyzer
-        "flake8>=7.0,<8",  # Style linter
-        "isort>=5.10,<6",  # Import sorting linter
+        "black",  # auto-formatter and linter
+        "mypy",  # Static type analyzer
+        "flake8",  # Style linter
+        "isort",  # Import sorting linter
     ],
     "release": [  # `release` GitHub Action job uses this
         "setuptools",  # Installation tool
@@ -21,7 +21,7 @@ extras_require = {
         "twine",  # Package upload tool
     ],
     "dev": [
-        "commitizen>=2.40,<3",  # Manage commits and publishing releases
+        "commitizen",  # Manage commits and publishing releases
         "pre-commit",  # Ensure that linters are run prior to commiting
         "pytest-watch",  # `ptw` test watcher/runner
         "IPython",  # Console for interacting
@@ -53,7 +53,7 @@ setup(
     url="https://github.com/ApeWorX/uniswap-sdk",
     include_package_data=True,
     install_requires=[
-        "eth-ape>=0.7,<1",
+        "eth-ape>=0.8,<1",
         "ethpm-types>=0.6.11",  # higher peer dep of `eth-ape`, solves typing issue
     ],  # NOTE: Add 3rd party libraries here
     python_requires=">=3.8,<4",

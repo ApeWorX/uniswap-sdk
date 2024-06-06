@@ -1,4 +1,5 @@
-from typing import Any, Callable, ClassVar, Dict, Iterable, List, Optional, Type
+from itertools import cycle
+from typing import Any, Callable, ClassVar, Iterable, Optional, Type, Union
 
 from ape.api import ReceiptAPI, TransactionAPI
 from ape.contracts import ContractInstance
@@ -9,6 +10,7 @@ from ape_ethereum.ecosystem import parse_type
 from eth_abi import decode as abi_decode
 from eth_abi import encode as abi_encode
 from eth_abi.exceptions import InsufficientDataBytes
+from eth_abi.packed import encode_packed
 from ethpm_types.abi import ABIType, MethodABI
 from hexbytes import HexBytes
 from pydantic import BaseModel, field_validator
@@ -35,48 +37,53 @@ class Constants:
 class Command(BaseModel, ManagerAccessMixin):
     # NOTE: Define in class defs
     type: ClassVar[int]
-    definition: ClassVar[List[ABIType]]
+    definition: ClassVar[list[ABIType]]
     is_revertible: ClassVar[bool] = False
 
     # NOTE: For parsing live data
-    inputs: List[Any]
+    args: list[Any]
     allow_revert: bool = False
 
-    @field_validator("inputs")
+    @field_validator("args")
     @classmethod
-    def validate_inputs(cls, inputs: List) -> List:
-        if len(inputs) != len(cls.definition):
+    def validate_args(cls, args: list) -> list:
+        if len(args) != len(cls.definition):
             raise ValueError(
-                f"Number of args ({len(inputs)}) does not match definition ({len(cls.definition)})."
+                f"Number of args ({len(args)}) does not match definition ({len(cls.definition)})."
             )
 
-        return inputs
+        return args
 
     def __repr__(self) -> str:
-        inputs_str = ", ".join(
-            f"{def_.name}={arg}" for def_, arg in zip(self.definition, self.inputs)
-        )
-        return f"{self.__class__.__name__}({inputs_str})"
+        args_str = ", ".join(f"{def_.name}={arg}" for def_, arg in zip(self.definition, self.args))
+        return f"{self.__class__.__name__}({args_str})"
+
+    def __getattr__(self, attr: str) -> Any:
+        for idx, abi_type in enumerate(self.definition):
+            if abi_type.name == attr:
+                return self.args[idx]
+
+        raise AttributeError
 
     @property
     def command_byte(self) -> int:
         return (Constants._ALLOW_REVERT_FLAG if self.allow_revert else 0x0) | self.type
 
-    def encode_inputs(self) -> HexBytes:
+    def encode_args(self) -> HexBytes:
         parser = StructParser(
             MethodABI(name=self.__class__.__name__, inputs=self.__class__.definition)
         )
-        arguments = parser.encode_input(self.inputs)
-        input_types = [i.canonical_type for i in self.definition]
+        arguments = parser.encode_input(self.args)
+        arg_types = [i.canonical_type for i in self.definition]
         python_types = tuple(
             self.provider.network.ecosystem._python_type_for_abi_type(i) for i in self.definition
         )
         converted_args = self.conversion_manager.convert(arguments, python_types)
-        encoded_calldata = abi_encode(input_types, converted_args)
+        encoded_calldata = abi_encode(arg_types, converted_args)
         return HexBytes(encoded_calldata)
 
     @classmethod
-    def _decode_inputs(cls, calldata: HexBytes) -> List[Any]:
+    def _decode_args(cls, calldata: HexBytes) -> list[Any]:
         raw_input_types = [i.canonical_type for i in cls.definition]
         input_types = [parse_type(i.model_dump(mode="json")) for i in cls.definition]
 
@@ -97,16 +104,34 @@ class Command(BaseModel, ManagerAccessMixin):
         if command_type not in ALL_COMMANDS_BY_TYPE:
             raise NotImplementedError(f"Unsupported command type: '{command_type}'")
 
-        cls = ALL_COMMANDS_BY_TYPE[command_type]
+        command_cls = ALL_COMMANDS_BY_TYPE[command_type]
         allow_revert = bool(command_byte & Constants._ALLOW_REVERT_FLAG)
 
-        if allow_revert and not cls.is_revertible:
+        if allow_revert and not command_cls.is_revertible:
             raise ValueError("Command is not reversible but reversibility is set.")
 
-        return cls(inputs=cls._decode_inputs(calldata), allow_revert=allow_revert)
+        return command_cls(args=command_cls._decode_args(calldata), allow_revert=allow_revert)
 
 
-class V3_SWAP_EXACT_IN(Command):
+def encode_path(path: list) -> bytes:
+    if len(path) % 2 != 1:
+        ValueError("Path must be an odd-length sequence of token, fee rate, token, ...")
+
+    types = [type for _, type in zip(path, cycle(["address", "uint24"]))]
+    return encode_packed(types, path)
+
+
+class _V3_EncodePathInput:
+    @field_validator("args", mode="before")
+    @classmethod
+    def encode_path_input(cls, args: list) -> list:
+        if isinstance(args[3], list):
+            args[3] = encode_path(args[3])
+
+        return args
+
+
+class V3_SWAP_EXACT_IN(_V3_EncodePathInput, Command):
     type = 0x00
 
     definition = [
@@ -118,7 +143,7 @@ class V3_SWAP_EXACT_IN(Command):
     ]
 
 
-class V3_SWAP_EXACT_OUT(Command):
+class V3_SWAP_EXACT_OUT(_V3_EncodePathInput, Command):
     type = 0x01
 
     definition = [
@@ -136,14 +161,27 @@ class PERMIT2_TRANSFER_FROM(Command):
     definition = [
         ABIType(name="token", type="address"),
         ABIType(name="recipient", type="address"),
-        ABIType(name="amount", type="uint256"),
+        ABIType(name="amount", type="uint160"),
     ]
 
 
-# class PERMIT2_PERMIT_BATCH(Command):
-#     type = 0x03
-#
-#     definition = []
+class PERMIT2_PERMIT_BATCH(Command):
+    type = 0x03
+
+    definition = [
+        ABIType(
+            name="details",
+            type="tuple[]",
+            components=[
+                ABIType(name="token", type="address"),
+                ABIType(name="amount", type="uint160"),
+                ABIType(name="expiration", type="uint48"),
+                ABIType(name="nonce", type="uint48"),
+            ],
+        ),
+        ABIType(name="spender", type="address"),
+        ABIType(name="deadline", type="uint256"),
+    ]
 
 
 class SWEEP(Command):
@@ -200,10 +238,23 @@ class V2_SWAP_EXACT_OUT(Command):
     ]
 
 
-# class PERMIT2_PERMIT(Command):
-#     type = 0x0A
-#
-#     definition = []
+class PERMIT2_PERMIT(Command):
+    type = 0x0A
+
+    definition = [
+        ABIType(
+            name="details",
+            type="tuple",
+            components=[
+                ABIType(name="token", type="address"),
+                ABIType(name="amount", type="uint160"),
+                ABIType(name="expiration", type="uint48"),
+                ABIType(name="nonce", type="uint48"),
+            ],
+        ),
+        ABIType(name="spender", type="address"),
+        ABIType(name="deadline", type="uint256"),
+    ]
 
 
 class WRAP_ETH(Command):
@@ -227,7 +278,18 @@ class UNWRAP_WETH(Command):
 class PERMIT2_TRANSFER_FROM_BATCH(Command):
     type = 0x0D
 
-    definition = []
+    definition = [
+        ABIType(
+            name="batch",
+            type="tuple[]",
+            components=[
+                ABIType(name="sender", type="address"),
+                ABIType(name="recipient", type="address"),
+                ABIType(name="amount", type="uint160"),
+                ABIType(name="token", type="address"),
+            ],
+        )
+    ]
 
 
 class BALANCE_CHECK_ERC20(Command):
@@ -240,130 +302,223 @@ class BALANCE_CHECK_ERC20(Command):
     ]
 
 
-# class SEAPORT_V1_5(Command):
-#     type = 0x10
-#
-#     definition = []
+class SEAPORT_V1_5(Command):
+    type = 0x10
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+    ]
 
 
-# class LOOKS_RARE_721(Command):
-#     type = 0x11
-#
-#     definition = []
+class LOOKS_RARE_V2(Command):
+    type = 0x11
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+    ]
 
 
-# class NFTX(Command):
-#     type = 0x12
-#
-#     definition = []
+class NFTX(Command):
+    type = 0x12
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+    ]
 
 
-# class CRYPTOPUNKS(Command):
-#     type = 0x13
-#
-#     definition = []
+class CRYPTOPUNKS(Command):
+    type = 0x13
+
+    definition = [
+        ABIType(name="punk_id", type="uint256"),
+        ABIType(name="recipient", type="address"),
+        ABIType(name="value", type="uint256"),
+    ]
 
 
-# class LOOKS_RARE_1155(Command):
-#     type = 0x14
-#
-#     definition = []
+class OWNER_CHECK_721(Command):
+    type = 0x15
+
+    definition = [
+        ABIType(name="owner", type="address"),
+        ABIType(name="token", type="address"),
+        ABIType(name="token_id", type="uint256"),
+    ]
 
 
-# class OWNER_CHECK_721(Command):
-#     type = 0x15
-#
-#     definition = []
+class OWNER_CHECK_1155(Command):
+    type = 0x16
+
+    definition = [
+        ABIType(name="owner", type="address"),
+        ABIType(name="token", type="address"),
+        ABIType(name="token_id", type="uint256"),
+        ABIType(name="min_balance", type="uint256"),
+    ]
 
 
-# class OWNER_CHECK_1155(Command):
-#     type = 0x16
-#
-#     definition = []
+class SWEEP_ERC721(Command):
+    type = 0x17
+
+    definition = [
+        ABIType(name="token", type="address"),
+        ABIType(name="recipient", type="address"),
+        ABIType(name="token_id", type="uint256"),
+    ]
 
 
-# class SWEEP_ERC721(Command):
-#     type = 0x17
-#
-#     definition = []
+class X2Y2_721(Command):
+    type = 0x18
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+        ABIType(name="recipient", type="address"),
+        ABIType(name="token", type="address"),
+        ABIType(name="token_id", type="uint256"),
+    ]
 
 
-# class X2Y2_721(Command):
-#     type = 0x18
-#
-#     definition = []
+class SUDOSWAP(Command):
+    type = 0x19
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+    ]
 
 
-# class SUDOSWAP(Command):
-#     type = 0x19
-#
-#     definition = []
+class NFT20(Command):
+    type = 0x1A
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+    ]
 
 
-# class NFT20(Command):
-#     type = 0x1A
-#
-#     definition = []
+class X2Y2_1155(Command):
+    type = 0x1B
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+        ABIType(name="recipient", type="address"),
+        ABIType(name="token", type="address"),
+        ABIType(name="token_id", type="uint256"),
+        ABIType(name="amount", type="uint256"),
+    ]
 
 
-# class X2Y2_1155(Command):
-#     type = 0x1B
-#
-#     definition = []
+class FOUNDATION(Command):
+    type = 0x1C
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+        ABIType(name="recipient", type="address"),
+        ABIType(name="token", type="address"),
+        ABIType(name="token_id", type="uint256"),
+    ]
 
 
-# class FOUNDATION(Command):
-#     type = 0x1C
-#
-#     definition = []
+class SWEEP_ERC1155(Command):
+    type = 0x1D
+
+    definition = [
+        ABIType(name="token", type="address"),
+        ABIType(name="recipient", type="address"),
+        ABIType(name="token_id", type="uint256"),
+        ABIType(name="amount", type="uint256"),
+    ]
 
 
-# class SWEEP_ERC1155(Command):
-#     type = 0x1D
-#
-#     definition = []
+class ELEMENT_MARKET(Command):
+    type = 0x1E
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+    ]
 
 
-# class ELEMENT_MARKET(Command):
-#     type = 0x1E
-#
-#     definition = []
+class SEAPORT_V1_4(Command):
+    type = 0x20
+
+    definition = [
+        ABIType(name="value", type="uint256"),
+        ABIType(name="data", type="bytes"),
+    ]
 
 
-# class SEAPORT_V1_4(Command):
-#     type = 0x20
-#
-#     definition = []
+class EXECUTE_SUB_PLAN(Command):
+    type = 0x21
+
+    definition = [
+        ABIType(name="commands", type="bytes"),
+        ABIType(name="inputs", type="bytes[]"),
+    ]
+
+    @field_validator("args", mode="before")
+    @classmethod
+    def encode_sub_plan(cls, sub_plan: Union[list, list[Command], "Plan"]) -> list:
+        if (
+            isinstance(sub_plan, list)
+            and len(sub_plan) > 0
+            and all(isinstance(e, Plan) for e in sub_plan)
+        ):
+            sub_plan = Plan(commands=sub_plan)
+
+        # NOTE: Intentionally execute this if above is true
+        if isinstance(sub_plan, Plan):
+            return [sub_plan.encoded_commands, sub_plan.encode_args()]
+
+        return sub_plan  # should be raw sub plan otherwise (validator check)
+
+    @property
+    def decoded_sub_plan(self) -> "Plan":
+        return Plan.decode(self.args[0], self.args[1])
+
+    def add_step(self, command: Command):
+        self.args[0] += command.command_byte
+        self.args[1].append(command.encode_args())
+
+    def rm_step(self):
+        if len(self.args[0]) == 0:
+            raise ValueError("No more items to pop.")
+
+        self.args[0] = self.args[0][:-1]
+        self.args[1].poplast()
 
 
-# class EXECUTE_SUB_PLAN(Command):
-#     type = 0x21
-#
-#     definition = []
+class APPROVE_ERC20(Command):
+    type = 0x22
 
-
-# class APPROVE_ERC20(Command):
-#     type = 0x22
-#
-#     definition = []
+    definition = [
+        ABIType(name="token", type="address"),
+        ABIType(name="spender", type="address"),
+    ]
 
 
 # NOTE: Must come after all the subclassing action above
-ALL_COMMANDS_BY_TYPE: Dict[int, Type[Command]] = {cls.type: cls for cls in Command.__subclasses__()}
-ALL_COMMANDS_BY_NAME: Dict[str, Type[Command]] = {
+ALL_COMMANDS_BY_TYPE: dict[int, Type[Command]] = {cls.type: cls for cls in Command.__subclasses__()}
+ALL_COMMANDS_BY_NAME: dict[str, Type[Command]] = {
     cls.__name__: cls for cls in Command.__subclasses__()
 }
 
 
 class Plan(BaseModel):
-    commands: List[Command] = []
+    commands: list[Command] = []
 
     @classmethod
-    def decode(cls, encoded_commands: HexBytes, encoded_inputs: Iterable[HexBytes]) -> "Plan":
+    def decode(cls, encoded_commands: HexBytes, encoded_args: Iterable[HexBytes]) -> "Plan":
         return cls(
             commands=[
                 Command.decode(command_byte, encoded_args)
-                for command_byte, encoded_args in zip(encoded_commands, encoded_inputs)
+                for command_byte, encoded_args in zip(encoded_commands, encoded_args)
             ]
         )
 
@@ -375,8 +530,8 @@ class Plan(BaseModel):
     def encoded_commands(self) -> HexBytes:
         return HexBytes(bytearray([cmd.command_byte for cmd in self.commands]))
 
-    def encode_inputs(self) -> List[HexBytes]:
-        return [cmd.encode_inputs() for cmd in self.commands]
+    def encode_args(self) -> list[HexBytes]:
+        return [cmd.encode_args() for cmd in self.commands]
 
     def __getattr__(self, command_name: str) -> Callable[..., "Plan"]:
         if command_name.upper() not in ALL_COMMANDS_BY_NAME:
@@ -385,7 +540,7 @@ class Plan(BaseModel):
         command_cls = ALL_COMMANDS_BY_NAME[command_name.upper()]
 
         def add_command(*args, **kwargs):
-            return self.add(command_cls(inputs=args, **kwargs))
+            return self.add(command_cls(args=args, **kwargs))
 
         return add_command
 
@@ -411,8 +566,8 @@ class UniversalRouter(ManagerAccessMixin):
         return self
 
     def decode_plan_from_calldata(self, calldata: HexBytes) -> Plan:
-        encoded_commands, encoded_inputs, _ = self.contract.execute.decode_args(calldata)
-        return Plan.decode(encoded_commands, encoded_inputs)
+        encoded_commands, encoded_args, _ = self.contract.execute.decode_args(calldata)
+        return Plan.decode(encoded_commands, encoded_args)
 
     def decode_plan_from_transaction(self, txn: TransactionAPI) -> Plan:
         if txn.receiver != self.contract.address:
@@ -423,7 +578,7 @@ class UniversalRouter(ManagerAccessMixin):
     def create_transaction_from_plan(
         self, plan: Plan, deadline: Optional[int] = None, **txn_args
     ) -> TransactionAPI:
-        args: List[Any] = [plan.encoded_commands, plan.encode_inputs()]
+        args: list[Any] = [plan.encoded_commands, plan.encode_args()]
 
         if deadline is not None:
             args.append(deadline)
@@ -431,7 +586,7 @@ class UniversalRouter(ManagerAccessMixin):
         return self.contract.execute.as_transaction(*args, **txn_args)
 
     def execute_plan(self, plan: Plan, deadline: Optional[int] = None, **txn_args) -> ReceiptAPI:
-        args: List[Any] = [plan.encoded_commands, plan.encode_inputs()]
+        args: list[Any] = [plan.encoded_commands, plan.encode_args()]
 
         if deadline is not None:
             args.append(deadline)
