@@ -56,10 +56,10 @@ TEST_CASES = {
         command_args=(
             HexBytes(
                 "0000000000000000000000000bc529c00c6401aef6d220be8c6ea1667f6ad93e"
-                "0000000000000000000000000000000000000000000000000000000000000001"
+                "000000000000000000000000f39fd6e51aad88f6f4ce6ab8827279cfffb92266"
             ),
         ),
-        plan_steps=(lambda plan: plan.approve_erc20(YFI, AMOUNT),),
+        plan_steps=(lambda plan: plan.approve_erc20(YFI, DEV),),
     ),
     ur.BALANCE_CHECK_ERC20.__name__: dict(
         command_bytes=HexBytes(ur.BALANCE_CHECK_ERC20.type),
@@ -89,7 +89,7 @@ TEST_CASES = {
             HexBytes(
                 "0000000000000000000000000bc529c00c6401aef6d220be8c6ea1667f6ad93e"
                 "000000000000000000000000f39fd6e51aad88f6f4ce6ab8827279cfffb92266"
-                "00000000000000000000000000000000000000000000000000000000000004d2"
+                "0000000000000000000000000000000000000000000000000de0b6b3a7640000"
             ),
         ),
         plan_steps=(lambda plan: plan.sweep(YFI, DEV, AMOUNT),),
@@ -100,10 +100,10 @@ TEST_CASES = {
             HexBytes(
                 "0000000000000000000000000bc529c00c6401aef6d220be8c6ea1667f6ad93e"
                 "000000000000000000000000f39fd6e51aad88f6f4ce6ab8827279cfffb92266"
-                "00000000000000000000000000000000000000000000000000000000000004d2"
+                "0000000000000000000000000000000000000000000000000000000000000064"
             ),
         ),
-        plan_steps=(lambda plan: plan.sweep(YFI, DEV, BIPS),),
+        plan_steps=(lambda plan: plan.pay_portion(YFI, DEV, BIPS),),
     ),
     ur.V2_SWAP_EXACT_IN.__name__: dict(
         command_bytes=HexBytes(ur.V2_SWAP_EXACT_IN.type),
