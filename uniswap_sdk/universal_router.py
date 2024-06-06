@@ -58,6 +58,13 @@ class Command(BaseModel, ManagerAccessMixin):
         args_str = ", ".join(f"{def_.name}={arg}" for def_, arg in zip(self.definition, self.args))
         return f"{self.__class__.__name__}({args_str})"
 
+    def __getattr__(self, attr: str) -> Any:
+        for idx, abi_type in enumerate(self.definition):
+            if abi_type.name == attr:
+                return self.args[idx]
+
+        raise AttributeError
+
     @property
     def command_byte(self) -> int:
         return (Constants._ALLOW_REVERT_FLAG if self.allow_revert else 0x0) | self.type
