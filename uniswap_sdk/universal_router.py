@@ -1,5 +1,5 @@
 from itertools import cycle
-from typing import Any, Callable, ClassVar, Dict, Iterable, List, Optional, Type
+from typing import Any, Callable, ClassVar, Iterable, Optional, Type, Union
 
 from ape.api import ReceiptAPI, TransactionAPI
 from ape.contracts import ContractInstance
@@ -37,48 +37,46 @@ class Constants:
 class Command(BaseModel, ManagerAccessMixin):
     # NOTE: Define in class defs
     type: ClassVar[int]
-    definition: ClassVar[List[ABIType]]
+    definition: ClassVar[list[ABIType]]
     is_revertible: ClassVar[bool] = False
 
     # NOTE: For parsing live data
-    inputs: List[Any]
+    args: list[Any]
     allow_revert: bool = False
 
-    @field_validator("inputs")
+    @field_validator("args")
     @classmethod
-    def validate_inputs(cls, inputs: List) -> List:
-        if len(inputs) != len(cls.definition):
+    def validate_args(cls, args: list) -> list:
+        if len(args) != len(cls.definition):
             raise ValueError(
-                f"Number of args ({len(inputs)}) does not match definition ({len(cls.definition)})."
+                f"Number of args ({len(args)}) does not match definition ({len(cls.definition)})."
             )
 
-        return inputs
+        return args
 
     def __repr__(self) -> str:
-        inputs_str = ", ".join(
-            f"{def_.name}={arg}" for def_, arg in zip(self.definition, self.inputs)
-        )
-        return f"{self.__class__.__name__}({inputs_str})"
+        args_str = ", ".join(f"{def_.name}={arg}" for def_, arg in zip(self.definition, self.args))
+        return f"{self.__class__.__name__}({args_str})"
 
     @property
     def command_byte(self) -> int:
         return (Constants._ALLOW_REVERT_FLAG if self.allow_revert else 0x0) | self.type
 
-    def encode_inputs(self) -> HexBytes:
+    def encode_args(self) -> HexBytes:
         parser = StructParser(
             MethodABI(name=self.__class__.__name__, inputs=self.__class__.definition)
         )
-        arguments = parser.encode_input(self.inputs)
-        input_types = [i.canonical_type for i in self.definition]
+        arguments = parser.encode_input(self.args)
+        arg_types = [i.canonical_type for i in self.definition]
         python_types = tuple(
             self.provider.network.ecosystem._python_type_for_abi_type(i) for i in self.definition
         )
         converted_args = self.conversion_manager.convert(arguments, python_types)
-        encoded_calldata = abi_encode(input_types, converted_args)
+        encoded_calldata = abi_encode(arg_types, converted_args)
         return HexBytes(encoded_calldata)
 
     @classmethod
-    def _decode_inputs(cls, calldata: HexBytes) -> List[Any]:
+    def _decode_args(cls, calldata: HexBytes) -> list[Any]:
         raw_input_types = [i.canonical_type for i in cls.definition]
         input_types = [parse_type(i.model_dump(mode="json")) for i in cls.definition]
 
@@ -105,10 +103,10 @@ class Command(BaseModel, ManagerAccessMixin):
         if allow_revert and not command_cls.is_revertible:
             raise ValueError("Command is not reversible but reversibility is set.")
 
-        return command_cls(inputs=command_cls._decode_inputs(calldata), allow_revert=allow_revert)
+        return command_cls(args=command_cls._decode_args(calldata), allow_revert=allow_revert)
 
 
-def encode_path(path: List) -> bytes:
+def encode_path(path: list) -> bytes:
     if len(path) % 2 != 1:
         ValueError("Path must be an odd-length sequence of token, fee rate, token, ...")
 
@@ -117,13 +115,13 @@ def encode_path(path: List) -> bytes:
 
 
 class _V3_EncodePathInput:
-    @field_validator("inputs", mode="before")
+    @field_validator("args", mode="before")
     @classmethod
-    def encode_path_input(cls, inputs: List) -> List:
-        if isinstance(inputs[3], list):
-            inputs[3] = encode_path(inputs[3])
+    def encode_path_input(cls, args: list) -> list:
+        if isinstance(args[3], list):
+            args[3] = encode_path(args[3])
 
-        return inputs
+        return args
 
 
 class V3_SWAP_EXACT_IN(_V3_EncodePathInput, Command):
@@ -457,9 +455,9 @@ class EXECUTE_SUB_PLAN(Command):
         ABIType(name="inputs", type="bytes[]"),
     ]
 
-    @field_validator("inputs", mode="before")
+    @field_validator("args", mode="before")
     @classmethod
-    def encode_sub_plan(cls, sub_plan: Union[List, List[Command], "Plan"]) -> List:
+    def encode_sub_plan(cls, sub_plan: Union[list, list[Command], "Plan"]) -> list:
         if (
             isinstance(sub_plan, list)
             and len(sub_plan) > 0
@@ -469,24 +467,24 @@ class EXECUTE_SUB_PLAN(Command):
 
         # NOTE: Intentionally execute this if above is true
         if isinstance(sub_plan, Plan):
-            return [sub_plan.encoded_commands, sub_plan.encode_inputs()]
+            return [sub_plan.encoded_commands, sub_plan.encode_args()]
 
         return sub_plan  # should be raw sub plan otherwise (validator check)
 
     @property
     def decoded_sub_plan(self) -> "Plan":
-        return Plan.decode(self.inputs[0], self.inputs[1])
+        return Plan.decode(self.args[0], self.args[1])
 
     def add_step(self, command: Command):
-        self.inputs[0] += command.command_byte
-        self.inputs[1].append(command.encode_inputs())
+        self.args[0] += command.command_byte
+        self.args[1].append(command.encode_args())
 
     def rm_step(self):
-        if len(self.inputs[0]) == 0:
+        if len(self.args[0]) == 0:
             raise ValueError("No more items to pop.")
 
-        self.inputs[0] = self.inputs[0][:-1]
-        self.inputs[1].poplast()
+        self.args[0] = self.args[0][:-1]
+        self.args[1].poplast()
 
 
 class APPROVE_ERC20(Command):
@@ -494,26 +492,26 @@ class APPROVE_ERC20(Command):
 
     definition = [
         ABIType(name="token", type="address"),
-        ABIType(name="spender", type="uint8"),  # 0 = opensea condiut, 1 = sudoswap
+        ABIType(name="spender", type="address"),
     ]
 
 
 # NOTE: Must come after all the subclassing action above
-ALL_COMMANDS_BY_TYPE: Dict[int, Type[Command]] = {cls.type: cls for cls in Command.__subclasses__()}
-ALL_COMMANDS_BY_NAME: Dict[str, Type[Command]] = {
+ALL_COMMANDS_BY_TYPE: dict[int, Type[Command]] = {cls.type: cls for cls in Command.__subclasses__()}
+ALL_COMMANDS_BY_NAME: dict[str, Type[Command]] = {
     cls.__name__: cls for cls in Command.__subclasses__()
 }
 
 
 class Plan(BaseModel):
-    commands: List[Command] = []
+    commands: list[Command] = []
 
     @classmethod
-    def decode(cls, encoded_commands: HexBytes, encoded_inputs: Iterable[HexBytes]) -> "Plan":
+    def decode(cls, encoded_commands: HexBytes, encoded_args: Iterable[HexBytes]) -> "Plan":
         return cls(
             commands=[
                 Command.decode(command_byte, encoded_args)
-                for command_byte, encoded_args in zip(encoded_commands, encoded_inputs)
+                for command_byte, encoded_args in zip(encoded_commands, encoded_args)
             ]
         )
 
@@ -525,8 +523,8 @@ class Plan(BaseModel):
     def encoded_commands(self) -> HexBytes:
         return HexBytes(bytearray([cmd.command_byte for cmd in self.commands]))
 
-    def encode_inputs(self) -> List[HexBytes]:
-        return [cmd.encode_inputs() for cmd in self.commands]
+    def encode_args(self) -> list[HexBytes]:
+        return [cmd.encode_args() for cmd in self.commands]
 
     def __getattr__(self, command_name: str) -> Callable[..., "Plan"]:
         if command_name.upper() not in ALL_COMMANDS_BY_NAME:
@@ -535,7 +533,7 @@ class Plan(BaseModel):
         command_cls = ALL_COMMANDS_BY_NAME[command_name.upper()]
 
         def add_command(*args, **kwargs):
-            return self.add(command_cls(inputs=args, **kwargs))
+            return self.add(command_cls(args=args, **kwargs))
 
         return add_command
 
@@ -561,8 +559,8 @@ class UniversalRouter(ManagerAccessMixin):
         return self
 
     def decode_plan_from_calldata(self, calldata: HexBytes) -> Plan:
-        encoded_commands, encoded_inputs, _ = self.contract.execute.decode_args(calldata)
-        return Plan.decode(encoded_commands, encoded_inputs)
+        encoded_commands, encoded_args, _ = self.contract.execute.decode_args(calldata)
+        return Plan.decode(encoded_commands, encoded_args)
 
     def decode_plan_from_transaction(self, txn: TransactionAPI) -> Plan:
         if txn.receiver != self.contract.address:
@@ -573,7 +571,7 @@ class UniversalRouter(ManagerAccessMixin):
     def create_transaction_from_plan(
         self, plan: Plan, deadline: Optional[int] = None, **txn_args
     ) -> TransactionAPI:
-        args: List[Any] = [plan.encoded_commands, plan.encode_inputs()]
+        args: list[Any] = [plan.encoded_commands, plan.encode_args()]
 
         if deadline is not None:
             args.append(deadline)
@@ -581,7 +579,7 @@ class UniversalRouter(ManagerAccessMixin):
         return self.contract.execute.as_transaction(*args, **txn_args)
 
     def execute_plan(self, plan: Plan, deadline: Optional[int] = None, **txn_args) -> ReceiptAPI:
-        args: List[Any] = [plan.encoded_commands, plan.encode_inputs()]
+        args: list[Any] = [plan.encoded_commands, plan.encode_args()]
 
         if deadline is not None:
             args.append(deadline)

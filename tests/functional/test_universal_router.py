@@ -27,13 +27,13 @@ TEST_CASES = {
     # Format of test cases:
     # <test name>: dict(
     #    command_bytes: HexBytes=...,
-    #    command_inputs: tuple[HexBytes]=...,
+    #    command_args: tuple[HexBytes]=...,
     #    plan_steps: tuple[Callable[[Plan], Plan]]=...,
     # )
     # NOTE: *must all follow the same format to load properly*
     ur.WRAP_ETH.__name__: dict(
         command_bytes=HexBytes(ur.WRAP_ETH.type),
-        command_inputs=(
+        command_args=(
             HexBytes(
                 "000000000000000000000000f39fd6e51aad88f6f4ce6ab8827279cfffb92266"
                 "0000000000000000000000000000000000000000000000000de0b6b3a7640000"
@@ -43,7 +43,7 @@ TEST_CASES = {
     ),
     ur.UNWRAP_WETH.__name__: dict(
         command_bytes=HexBytes(ur.UNWRAP_WETH.type),
-        command_inputs=(
+        command_args=(
             HexBytes(
                 "000000000000000000000000f39fd6e51aad88f6f4ce6ab8827279cfffb92266"
                 "0000000000000000000000000000000000000000000000000de0b6b3a7640000"
@@ -53,7 +53,7 @@ TEST_CASES = {
     ),
     ur.APPROVE_ERC20.__name__: dict(
         command_bytes=HexBytes(ur.APPROVE_ERC20.type),
-        command_inputs=(
+        command_args=(
             HexBytes(
                 "0000000000000000000000000bc529c00c6401aef6d220be8c6ea1667f6ad93e"
                 "0000000000000000000000000000000000000000000000000000000000000001"
@@ -63,7 +63,7 @@ TEST_CASES = {
     ),
     ur.BALANCE_CHECK_ERC20.__name__: dict(
         command_bytes=HexBytes(ur.BALANCE_CHECK_ERC20.type),
-        command_inputs=(
+        command_args=(
             HexBytes(
                 "000000000000000000000000f39fd6e51aad88f6f4ce6ab8827279cfffb92266"
                 "0000000000000000000000000bc529c00c6401aef6d220be8c6ea1667f6ad93e"
@@ -74,7 +74,7 @@ TEST_CASES = {
     ),
     ur.TRANSFER.__name__: dict(
         command_bytes=HexBytes(ur.TRANSFER.type),
-        command_inputs=(
+        command_args=(
             HexBytes(
                 "0000000000000000000000000bc529c00c6401aef6d220be8c6ea1667f6ad93e"
                 "000000000000000000000000f39fd6e51aad88f6f4ce6ab8827279cfffb92266"
@@ -85,7 +85,7 @@ TEST_CASES = {
     ),
     ur.SWEEP.__name__: dict(
         command_bytes=HexBytes(ur.SWEEP.type),
-        command_inputs=(
+        command_args=(
             HexBytes(
                 "0000000000000000000000000bc529c00c6401aef6d220be8c6ea1667f6ad93e"
                 "000000000000000000000000f39fd6e51aad88f6f4ce6ab8827279cfffb92266"
@@ -96,7 +96,7 @@ TEST_CASES = {
     ),
     ur.PAY_PORTION.__name__: dict(
         command_bytes=HexBytes(ur.PAY_PORTION.type),
-        command_inputs=(
+        command_args=(
             HexBytes(
                 "0000000000000000000000000bc529c00c6401aef6d220be8c6ea1667f6ad93e"
                 "000000000000000000000000f39fd6e51aad88f6f4ce6ab8827279cfffb92266"
@@ -107,7 +107,7 @@ TEST_CASES = {
     ),
     ur.V2_SWAP_EXACT_IN.__name__: dict(
         command_bytes=HexBytes(ur.V2_SWAP_EXACT_IN.type),
-        command_inputs=(
+        command_args=(
             HexBytes(
                 "000000000000000000000000f39fd6e51aad88f6f4ce6ab8827279cfffb92266"
                 "0000000000000000000000000000000000000000000000000de0b6b3a7640000"
@@ -125,7 +125,7 @@ TEST_CASES = {
     ),
     ur.V2_SWAP_EXACT_OUT.__name__: dict(
         command_bytes=HexBytes(ur.V2_SWAP_EXACT_OUT.type),
-        command_inputs=(
+        command_args=(
             HexBytes(
                 "000000000000000000000000f39fd6e51aad88f6f4ce6ab8827279cfffb92266"
                 "0000000000000000000000000000000000000000000000000de0b6b3a7640000"
@@ -154,9 +154,9 @@ def case_combinations(tests):
                 tests[caseA].get("command_bytes", HexBytes(b""))  # type: ignore[operator]
                 + tests[caseB].get("command_bytes", HexBytes(b""))
             ),
-            command_inputs=(
-                *tests[caseA].get("command_inputs", tuple()),
-                *tests[caseB].get("command_inputs", tuple()),
+            command_args=(
+                *tests[caseA].get("command_args", tuple()),
+                *tests[caseB].get("command_args", tuple()),
             ),
             plan_steps=(
                 *tests[caseA].get("plan_steps", tuple()),
@@ -174,9 +174,9 @@ def case_products(testsA, testsB):
                 testsA[caseA].get("command_bytes", HexBytes(b""))  # type: ignore[operator]
                 + testsB[caseB].get("command_bytes", HexBytes(b""))
             ),
-            command_inputs=(
-                *testsA[caseA].get("command_inputs", tuple()),
-                *testsB[caseB].get("command_inputs", tuple()),
+            command_args=(
+                *testsA[caseA].get("command_args", tuple()),
+                *testsB[caseB].get("command_args", tuple()),
             ),
             plan_steps=(
                 *testsA[caseA].get("plan_steps", tuple()),
@@ -199,12 +199,12 @@ def test_encode_decode_plan(command_name):
     for add_step in TEST_CASES[command_name].get("plan_steps"):
         plan = add_step(plan)
 
-    encoded_command_bytes, encoded_command_inputs = (
+    encoded_command_bytes, encoded_command_args = (
         TEST_CASES[command_name].get("command_bytes"),
-        TEST_CASES[command_name].get("command_inputs"),
+        TEST_CASES[command_name].get("command_args"),
     )
-    decoded_plan = ur.Plan.decode(encoded_command_bytes, encoded_command_inputs)
+    decoded_plan = ur.Plan.decode(encoded_command_bytes, encoded_command_args)
 
     assert plan == decoded_plan
     assert plan.encoded_commands == decoded_plan.encoded_commands == encoded_command_bytes
-    assert plan.encode_inputs() == decoded_plan.encode_inputs() == encoded_command_inputs
+    assert plan.encode_args() == decoded_plan.encode_args() == list(encoded_command_args)
