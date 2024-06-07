@@ -4,7 +4,7 @@ from typing import Any, Callable, ClassVar, Iterable, Optional, Type, Union
 from ape.api import ReceiptAPI, TransactionAPI
 from ape.contracts import ContractInstance
 from ape.exceptions import DecodingError
-from ape.managers import ManagerAccessMixin, ProjectManager
+from ape.managers import ManagerAccessMixin
 from ape.utils import StructParser, cached_property
 from ape_ethereum.ecosystem import parse_type
 from eth_abi import decode as abi_decode
@@ -124,7 +124,7 @@ def encode_path(path: list) -> bytes:
 
 
 def decode_path(path: bytes) -> list:
-    decoded_path = []
+    decoded_path: list[Union[str, int]] = []
     decoded_type = cycle(["address", "uint24"])
     while len(path) > 0:
         t = next(decoded_type)
