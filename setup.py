@@ -63,7 +63,7 @@ setup(
     zip_safe=False,
     keywords="ethereum",
     packages=find_packages(exclude=["tests", "tests.*"]),
-    package_data={"uniswap_sdk": ["py.typed"]},
+    package_data={"uniswap_sdk": ["py.typed", "*.json"]},
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
