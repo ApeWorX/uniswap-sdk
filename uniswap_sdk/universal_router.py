@@ -123,7 +123,19 @@ def encode_path(path: list) -> bytes:
     return encode_packed(types, path)
 
 
-class _V3_EncodePathInput:
+def decode_path(path: bytes) -> list:
+    decoded_path = []
+    decoded_type = cycle(["address", "uint24"])
+    while len(path) > 0:
+        t = next(decoded_type)
+        idx = 20 if t == "address" else 3
+        data, path = path[:idx], path[idx:]
+        decoded_path.extend(abi_decode([t], b"\x00" * (12 if t == "address" else 29) + data))
+
+    return decoded_path
+
+
+class _V3_EncodePathInput(Command):
     @field_validator("args", mode="before")
     @classmethod
     def encode_path_input(cls, args: list) -> list:
@@ -131,6 +143,18 @@ class _V3_EncodePathInput:
             args[3] = encode_path(args[3])
 
         return args
+
+    def __repr__(self) -> str:
+        names = list(def_.name for def_ in self.definition)
+        args = self.args.copy()
+        names[3] = "path"
+        args[3] = self.path
+        args_str = ", ".join(f"{name}={arg}" for name, arg in zip(names, args))
+        return f"{self.__class__.__name__}({args_str})"
+
+    @property
+    def path(self) -> list:
+        return decode_path(self.encodedPath)
 
 
 class V3_SWAP_EXACT_IN(_V3_EncodePathInput, Command):
@@ -506,9 +530,11 @@ class APPROVE_ERC20(Command):
 
 
 # NOTE: Must come after all the subclassing action above
-ALL_COMMANDS_BY_TYPE: dict[int, Type[Command]] = {cls.type: cls for cls in Command.__subclasses__()}
+ALL_COMMANDS_BY_TYPE: dict[int, Type[Command]] = {
+    cls.type: cls for cls in Command.__subclasses__() if not cls.__name__.startswith("_")
+}
 ALL_COMMANDS_BY_NAME: dict[str, Type[Command]] = {
-    cls.__name__: cls for cls in Command.__subclasses__()
+    cls.__name__: cls for cls in Command.__subclasses__() if not cls.__name__.startswith("_")
 }
 
 
