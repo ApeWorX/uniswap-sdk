@@ -15,6 +15,8 @@ from ethpm_types.abi import ABIType, MethodABI
 from hexbytes import HexBytes
 from pydantic import BaseModel, field_validator
 
+from .packages import UNI_ROUTER, get_contract_instance
+
 
 # NOTE: Special constants
 class Constants:
@@ -546,36 +548,32 @@ class Plan(BaseModel):
 
 
 class UniversalRouter(ManagerAccessMixin):
-    @classmethod
-    def load_project(cls) -> ProjectManager:
-        raise NotImplementedError
-
-    @cached_property
-    def project(self) -> ProjectManager:
-        return self.__class__.load_project()
-
     @cached_property
     def contract(self) -> ContractInstance:
-        raise NotImplementedError
+        return get_contract_instance(UNI_ROUTER.UniversalRouter, self.provider.chain_id)
 
     @classmethod
     def inject(cls, *deploy_args, **tx_args) -> "UniversalRouter":
         self = cls()
         # NOTE: Override the cached property value since we are creating it manually
-        self.contract = self.project.UniversalRouter.deploy(*deploy_args, **tx_args)
+        self.contract = UNI_ROUTER.UniversalRouter.deploy(*deploy_args, **tx_args)
         return self
 
     def decode_plan_from_calldata(self, calldata: HexBytes) -> Plan:
-        encoded_commands, encoded_args, _ = self.contract.execute.decode_args(calldata)
-        return Plan.decode(encoded_commands, encoded_args)
+        _, decoded_calldata = self.contract.execute.decode_input(calldata)
+        return Plan.decode(decoded_calldata["commands"], decoded_calldata["inputs"])
 
-    def decode_plan_from_transaction(self, txn: TransactionAPI) -> Plan:
+    def decode_plan_from_transaction(self, txn: Union[str, TransactionAPI, ReceiptAPI]) -> Plan:
+        if isinstance(txn, str):
+            txn = self.provider.get_receipt(txn)
+
+        assert isinstance(txn, (TransactionAPI, ReceiptAPI))  # for mypy
         if txn.receiver != self.contract.address:
             raise ValueError("Cannot decode plan from transaction to different contract.")
 
         return self.decode_plan_from_calldata(HexBytes(txn.data))
 
-    def create_transaction_from_plan(
+    def plan_as_transaction(
         self, plan: Plan, deadline: Optional[int] = None, **txn_args
     ) -> TransactionAPI:
         args: list[Any] = [plan.encoded_commands, plan.encode_args()]
@@ -585,7 +583,7 @@ class UniversalRouter(ManagerAccessMixin):
 
         return self.contract.execute.as_transaction(*args, **txn_args)
 
-    def execute_plan(self, plan: Plan, deadline: Optional[int] = None, **txn_args) -> ReceiptAPI:
+    def execute(self, plan: Plan, deadline: Optional[int] = None, **txn_args) -> ReceiptAPI:
         args: list[Any] = [plan.encoded_commands, plan.encode_args()]
 
         if deadline is not None:
