@@ -600,13 +600,6 @@ class UniversalRouter(ManagerAccessMixin):
     def contract(self) -> ContractInstance:
         return get_contract_instance(UNI_ROUTER.UniversalRouter, self.provider.chain_id)
 
-    @classmethod
-    def inject(cls, *deploy_args, **tx_args) -> "UniversalRouter":
-        self = cls()
-        # NOTE: Override the cached property value since we are creating it manually
-        self.contract = UNI_ROUTER.UniversalRouter.deploy(*deploy_args, **tx_args)
-        return self
-
     def decode_plan_from_calldata(self, calldata: HexBytes) -> Plan:
         _, decoded_calldata = self.contract.execute.decode_input(calldata)
         return Plan.decode(decoded_calldata["commands"], decoded_calldata["inputs"])
