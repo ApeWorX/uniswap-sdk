@@ -539,6 +539,16 @@ ALL_COMMANDS_BY_NAME: dict[str, Type[Command]] = {
 
 
 class Plan(BaseModel):
+    """
+    A plan to execute with the UniversalRouter.
+    All of the available plan steps are available as attributes on this class.
+    You can also directly add a plan step through `plan.add(...)`
+
+    Usage exmaple::
+        >>> plan = Plan().wrap_eth(...)...  # Use the builder pattern to create a plan
+        >>> plan.add(V3_SWAP_EXACT_IN(args=...))  # Directly add a command to the plan
+    """
+
     commands: list[Command] = []
 
     @classmethod
@@ -574,6 +584,18 @@ class Plan(BaseModel):
 
 
 class UniversalRouter(ManagerAccessMixin):
+    """
+    Class for working with the Uniswap UniversalRouter:
+        https://docs.uniswap.org/contracts/universal-router/overview
+
+    It is useful to use the :class:`Plan` object to help you create your plans for the router.
+
+    Usage example::
+        >>> ur = UniversalRouter()
+        >>> plan = Plan.wrap_eth("1 ether").unwrap_eth("1 ether")
+        >>> ur.execute(plan, sender=me, value="1 ether")
+    """
+
     @cached_property
     def contract(self) -> ContractInstance:
         return get_contract_instance(UNI_ROUTER.UniversalRouter, self.provider.chain_id)
@@ -590,6 +612,10 @@ class UniversalRouter(ManagerAccessMixin):
         return Plan.decode(decoded_calldata["commands"], decoded_calldata["inputs"])
 
     def decode_plan_from_transaction(self, txn: Union[str, TransactionAPI, ReceiptAPI]) -> Plan:
+        """
+        Decode any plan from a transaction object, receipt object,
+        or transaction hash (that has been mined)
+        """
         if isinstance(txn, str):
             txn = self.provider.get_receipt(txn)
 
@@ -602,6 +628,9 @@ class UniversalRouter(ManagerAccessMixin):
     def plan_as_transaction(
         self, plan: Plan, deadline: Optional[int] = None, **txn_args
     ) -> TransactionAPI:
+        """
+        Encode the plan as a transaction for further processing
+        """
         args: list[Any] = [plan.encoded_commands, plan.encode_args()]
 
         if deadline is not None:
@@ -610,6 +639,9 @@ class UniversalRouter(ManagerAccessMixin):
         return self.contract.execute.as_transaction(*args, **txn_args)
 
     def execute(self, plan: Plan, deadline: Optional[int] = None, **txn_args) -> ReceiptAPI:
+        """
+        Submit the plan as a transaction and broadcast it
+        """
         args: list[Any] = [plan.encoded_commands, plan.encode_args()]
 
         if deadline is not None:
