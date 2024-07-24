@@ -69,6 +69,7 @@ ADDRESSES_BY_CHAIN_ID: dict[str, dict[int, AddressType]] = {
         chain_id("blast", "mainnet"): addr("0x792edAdE80af5fC680d96a2eD80A44247D2Cf6Fd"),
     },
     # NOTE: UniswapV3Pool addresses should be queried from factory
+    # https://github.com/Uniswap/universal-router/tree/main/deploy-addresses
     UNI_ROUTER.UniversalRouter.contract_type.name: {
         0: addr("0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD"),
         chain_id("arbitrum", "mainnet"): addr("0x5E325eDA8064b456f4781070C0738d849c824258"),
