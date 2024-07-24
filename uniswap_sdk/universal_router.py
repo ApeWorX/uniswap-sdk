@@ -592,9 +592,11 @@ class UniversalRouter(ManagerAccessMixin):
 
     Usage example::
         >>> ur = UniversalRouter()
-        >>> plan = Plan.wrap_eth("1 ether").unwrap_eth("1 ether")
+        >>> plan = Plan().wrap_eth("1 ether").unwrap_eth("1 ether")
         >>> ur.execute(plan, sender=me, value="1 ether")
     """
+
+    constants = Constants
 
     @cached_property
     def contract(self) -> ContractInstance:
