@@ -284,6 +284,8 @@ class PERMIT2_PERMIT(Command):
 
 
 class WRAP_ETH(Command):
+    """Wrap `amountMin` (or more) ether and send to `recipient`"""
+
     type = 0x0B
 
     definition = [
@@ -578,9 +580,17 @@ class Plan(BaseModel):
         command_cls = ALL_COMMANDS_BY_NAME[command_name.upper()]
 
         def add_command(*args, **kwargs):
+            # TODO: Conversion and kwarg stripping
             return self.add(command_cls(args=args, **kwargs))
 
+        # TODO: Make `add_command` repr nicely and show args
+        add_command.__doc__ = command_cls.__doc__
         return add_command
+
+    # TODO: Add nice __repr__/__str__
+
+    def __dir__(self) -> list[str]:
+        return list(n.lower() for n in ALL_COMMANDS_BY_NAME)
 
 
 class UniversalRouter(ManagerAccessMixin):
