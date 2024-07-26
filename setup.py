@@ -53,8 +53,8 @@ setup(
     url="https://github.com/ApeWorX/uniswap-sdk",
     include_package_data=True,
     install_requires=[
-        "eth-ape>=0.8,<1.0",
-        "ethpm-types>=0.6.11",  # higher peer dep of `eth-ape`, solves typing issues
+        "eth-ape>=0.8,<1",
+        "ethpm-types>=0.6.11",  # higher peer dep of `eth-ape`, solves typing issue
     ],  # NOTE: Add 3rd party libraries here
     python_requires=">=3.9,<4",
     extras_require=extras_require,
