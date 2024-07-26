@@ -1,0 +1,39 @@
+# NOTE: We don't need this other than for copying over the manifests to build with the
+#       python package, and for testing
+
+plugins:
+  # For compiling contracts
+  - name: solidity
+  # For fork testing
+  - name: foundry
+
+dependencies:
+  - name: uniswap-v3
+    github: Uniswap/v3-core
+    ref: v1.0.0
+
+  - name: uniswap-v2
+    github: Uniswap/v2-core
+    ref: v1.0.1
+
+  - name: permit2
+    github: Uniswap/permit2
+    ref: main
+    config_override:
+      solidity:
+        via_ir: True  # NOTE: Trouble compiling without this
+
+  - name: universal-router
+    github: Uniswap/universal-router
+    ref: v1.6.0
+    config_override:
+      dependencies:
+        - name: openzeppelin
+          github: OpenZeppelin/openzeppelin-contracts
+          ref: v4.7.0
+      solidity:
+        import_remapping:
+          - "permit2=permit2"
+          - "@uniswap/v3-core=uniswap-v3"
+          - "@uniswap/v2-core=uniswap-v2"
+        via_ir: True  # NOTE: Trouble compiling without this
