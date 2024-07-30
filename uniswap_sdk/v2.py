@@ -63,7 +63,7 @@ class Factory(ManagerAccessMixin):
             yield Pool(address)
 
     def get_all_pools(self) -> Iterator["Pool"]:
-        df =  self.contract.PairCreated.query("*", start_block=-1000)
+        df = self.contract.PairCreated.query("*", start_block=-1000)
         pairs = df["event_arguments"].apply(lambda x: x.get("pair"))
         for pair in pairs:
             yield Pool(pair)
