@@ -53,13 +53,20 @@ class Factory(ManagerAccessMixin):
 
     def get_pools(self, token: AddressType) -> Iterator["Pool"]:
         # TODO: Use query manager to search once topic filtering is available
-        for log in self.contract.PairCreated:
-            if token in (log.token0, log.token1):  # `token` is either one in the pool's pair
-                yield Pool(log.pair)
+        df = self.contract.PairCreated.query("*", start_block=-1000)
+        addresses = df[
+            df["event_arguments"].apply(
+                lambda x: x.get("token0") == token or x.get("token1") == token
+            )
+        ]["contract_address"]
+        for address in addresses:
+            yield Pool(address)
 
     def get_all_pools(self) -> Iterator["Pool"]:
-        for address in self.contract.PairCreated.query("pair").pair:
-            yield Pool(address)
+        df =  self.contract.PairCreated.query("*", start_block=-1000)
+        pairs = df["event_arguments"].apply(lambda x: x.get("pair"))
+        for pair in pairs:
+            yield Pool(pair)
 
 
 class Pool(ManagerAccessMixin):
