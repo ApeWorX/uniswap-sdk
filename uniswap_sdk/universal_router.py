@@ -4,7 +4,7 @@ from typing import Any, Callable, ClassVar, Iterable, Optional, Type, Union
 from ape.api import ReceiptAPI, TransactionAPI
 from ape.contracts import ContractInstance
 from ape.exceptions import DecodingError
-from ape.managers import ManagerAccessMixin
+from ape.managers.base import ManagerAccessMixin
 from ape.utils import StructParser, cached_property
 from ape_ethereum.ecosystem import parse_type
 from eth_abi import decode as abi_decode
