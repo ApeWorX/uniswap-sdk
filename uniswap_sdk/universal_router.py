@@ -602,7 +602,7 @@ class UniversalRouter(ManagerAccessMixin):
 
     Usage example::
         >>> ur = UniversalRouter()
-        >>> plan = Plan().wrap_eth("1 ether").unwrap_eth("1 ether")
+        >>> plan = Plan().wrap_eth(ur.contract, "1 ether").unwrap_weth(me, "1 ether")
         >>> ur.execute(plan, sender=me, value="1 ether")
     """
 
