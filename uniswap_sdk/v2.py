@@ -20,7 +20,7 @@ class Factory(ManagerAccessMixin):
         >>> factory = v2.Factory()
         >>> for pair in factory.get_all_pairs():
         ...     print(pair)  # WARNING: Will take 3 mins or more to fetch
-        >>> len(list(factory.get_all_pairs()))  # Cached, almost instantaneous
+        >>> len(list(factory))  # Cached, almost instantaneous
         396757
         >>> from ape_tokens import tokens
         >>> yfi = tokens["YFI"]
@@ -79,7 +79,7 @@ class Factory(ManagerAccessMixin):
             call.add(pair.contract.token1)
             pairs_to_check.append(pair)
 
-            if len(call.calls) >= 1_000:  # TODO: Parametrize multicall incremenet (per network?)
+            if len(call.calls) >= 1_000:  # TODO: Parametrize multicall increment (per network?)
                 matching_pairs = list(self._filter_matching_pairs(token, call, pairs_to_check))
                 # NOTE: Cache to avoid additional call next time
                 self._indexed_pairs[token.address].extend(matching_pairs)
@@ -106,7 +106,7 @@ class Factory(ManagerAccessMixin):
         yield from iter(self._cached_pairs)
 
         # TODO: Reformat to query system when better (using PairCreated)
-        if (num_pairs := self.contract.allPairsLength()) >= (last_pair := len(self._cached_pairs)):
+        if (num_pairs := len(self)) > (last_pair := len(self._cached_pairs)):
             # NOTE: This can be faster than brute force way
             while last_pair < num_pairs:
                 call = multicall.Call()
@@ -123,6 +123,12 @@ class Factory(ManagerAccessMixin):
                 yield from iter(new_pairs)
                 self._cached_pairs.extend(new_pairs)
                 last_pair += len(call.calls)
+
+    def __iter__(self) -> Iterator["Pair"]:
+        return self.get_all_pairs()
+
+    def __len__(self) -> int:
+        return self.contract.allPairsLength()
 
 
 class Pair(ManagerAccessMixin):
