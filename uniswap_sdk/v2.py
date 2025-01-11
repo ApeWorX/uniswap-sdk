@@ -13,7 +13,7 @@ from eth_utils import is_checksum_address, to_int
 from .packages import V2, get_contract_instance
 
 try:
-    from ape_tokens.managers import ERC20
+    from ape_tokens.managers import ERC20  # type: ignore[import-not-found]
 except ImportError:
     ERC20 = None
 
@@ -287,7 +287,7 @@ class Pair(ManagerAccessMixin):
         else:
             return self.token1_symbol == token
 
-    def get_reserves(self) -> (int, int, int):
+    def get_reserves(self) -> tuple[int, int, int]:
         return self.contract.getReserves()
 
     def __getitem__(self, token: ContractInstance | str) -> Decimal:
