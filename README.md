@@ -4,29 +4,27 @@
 
 ## Usage
 
-**NOTE: Sketch of potential usage**
-```py
-from ape_tokens import tokens
-from uniswap_sdk import v2 as uni_v2
-
-# Uses v2's TWAP oracle pricing algorithm
-price = uni_v2.price(base=tokens["USDC"], quote=tokens["YFI"])
-print(f"Buying 100k USDC worth of YFI at {price} USDC/YFI")
-
-# Will automatically discover best possible route for given trade on Uniswap v2
-# NOTE: Slippage and timeout are configurable
-uni_v2.swap(base=tokens["USDC"], quote=tokens["YFI"], amount_in="100_000 USDC", sender=trader)
-```
+Uniswap V2 Usage:
 
 ```py
-# Eventual goal?
-import uniswap_sdk as uni
-
-# Finds most liquid price across v2 and v3
-price = uni.price(base=tokens["USDC"], quote=tokens["YFI"])
-
-# Performs best swap between v2 and v3
-uni.swap(base=tokens["USDC"], quote=tokens["YFI"], amount_in="100_000 USDC", sender=trader)
+>>> from uniswap_sdk import v2
+>>> factory = v2.Factory()
+>>> for pair in factory.get_all_pairs():
+...     print(pair)  # WARNING: Will take 6 mins or more to fetch
+>>> len(list(factory))  # Cached, almost instantaneous afterwards
+396757
+>>> from ape_tokens import tokens
+>>> yfi = tokens["YFI"]
+>>> for pair in factory.get_pairs_by_token(yfi):
+...     print(pair)  # WARNING: Will take 12 mins or more to index
+>>> len(factory["YFI"])  # Already indexed, almost instantaneous
+73
+>>> pair = factory.get_pair(yfi, tokens["USDC"])  # Single contract call
+<uniswap_sdk.v2.Pair address=0xdE37cD310c70e7Fa9d7eD3261515B107D5Fe1F2d>
+>>> for route in factory.find_routes(yfi, usdc, depth=3):
+...     # WARNING: For tokens with lots of pairs, exploring at depth of 3
+...     #          or more will take a long time -- use the default of 2
+...     # Routes can be used for path planning now!
 ```
 
 ## Dependencies
