@@ -323,10 +323,7 @@ class Pair(ManagerAccessMixin):
         Price of ``token`` relative to the other token in the pair.
         """
         token0_reserve, token1_reserve, _ = self.get_reserves(block_id=block_id)
-        token0_balance = Decimal(token0_reserve) / Decimal(10**self.token0_decimals)
-        token1_balance = Decimal(token1_reserve) / Decimal(10**self.token1_decimals)
-
         if self.is_token0(token.address if isinstance(token, ContractInstance) else token):
-            return token1_balance / token0_balance
+            return token1_reserve / token0_reserve
         else:
-            return token0_balance / token1_balance
+            return token0_reserve / token1_reserve
