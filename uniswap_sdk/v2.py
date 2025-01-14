@@ -287,8 +287,10 @@ class Pair(ManagerAccessMixin):
         else:
             return self.token1_symbol == token
 
-    def get_reserves(self) -> tuple[int, int, int]:
-        return self.contract.getReserves()
+    def get_reserves(self, block_id: int | str = "latest") -> tuple[int, int, int]:
+        if isinstance(block_id, int) and block_id < 0:
+            block_id += self.chain_manager.blocks.head.number
+        return self.contract.getReserves(block_id=block_id)
 
     def __getitem__(self, token: ContractInstance | str) -> Decimal:
         if isinstance(token, ContractInstance):
@@ -316,11 +318,15 @@ class Pair(ManagerAccessMixin):
 
         raise ValueError(f"Token {token} is not one of the tokens in the pair")
 
-    def price(self, token: ContractInstance | str) -> Decimal:
+    def price(self, token: ContractInstance | str, block_id: int | str = "latest") -> Decimal:
         """
         Price of ``token`` relative to the other token in the pair.
         """
-        if isinstance(token, ContractInstance):
-            token = token.address
+        token0_reserve, token1_reserve, _ = self.get_reserves(block_id=block_id)
+        token0_balance = Decimal(token0_reserve) / Decimal(10**self.token0_decimals)
+        token1_balance = Decimal(token1_reserve) / Decimal(10**self.token1_decimals)
 
-        return self[self.other(token)] / self[token]
+        if self.is_token0(token.address if isinstance(token, ContractInstance) else token):
+            return token1_balance / token0_balance
+        else:
+            return token0_balance / token1_balance
