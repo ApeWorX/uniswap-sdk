@@ -62,7 +62,7 @@ setup(
         "ethpm-types>=0.6.11",  # higher peer dep of `eth-ape`, solves typing issue
         "networkx>=3.4,<4",  # route planning
     ],  # NOTE: Add 3rd party libraries here
-    python_requires=">=3.9,<4",
+    python_requires=">=3.10,<4",
     extras_require=extras_require,
     py_modules=["uniswap_sdk"],
     license="Apache-2.0",
@@ -78,7 +78,6 @@ setup(
         "Operating System :: MacOS",
         "Operating System :: POSIX",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
