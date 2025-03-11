@@ -20,6 +20,10 @@ extras_require = {
         "wheel",  # Packaging tool
         "twine",  # Package upload tool
     ],
+    "bot": [
+        "ape-tokens",
+        "silverback",
+    ],
     "dev": [
         "commitizen",  # Manage commits and publishing releases
         "pre-commit",  # Ensure that linters are run prior to commiting
@@ -34,6 +38,7 @@ extras_require["dev"] = (
     extras_require["test"]
     + extras_require["lint"]
     + extras_require["release"]
+    + extras_require["bot"]
     + extras_require["dev"]
 )
 
@@ -55,8 +60,9 @@ setup(
     install_requires=[
         "eth-ape>=0.8,<1",
         "ethpm-types>=0.6.11",  # higher peer dep of `eth-ape`, solves typing issue
+        "networkx>=3.4,<4",  # route planning
     ],  # NOTE: Add 3rd party libraries here
-    python_requires=">=3.9,<4",
+    python_requires=">=3.10,<4",
     extras_require=extras_require,
     py_modules=["uniswap_sdk"],
     license="Apache-2.0",
@@ -72,7 +78,6 @@ setup(
         "Operating System :: MacOS",
         "Operating System :: POSIX",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",

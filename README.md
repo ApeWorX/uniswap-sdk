@@ -4,32 +4,23 @@
 
 ## Usage
 
-Uniswap V2 Usage:
+_NOTE: Only Uniswap V2 supported_
+
+Usage:
 
 ```py
->>> from uniswap_sdk import v2
->>> factory = v2.Factory()
->>> for pair in factory.get_all_pairs():
-...     print(pair)  # WARNING: Will take 6 mins or more to fetch
->>> len(list(factory))  # Cached, almost instantaneous afterwards
-396757
+>>> from uniswap_sdk import Uniswap
+>>> uni = Uniswap()
 >>> from ape_tokens import tokens
 >>> yfi = tokens["YFI"]
->>> for pair in factory.get_pairs_by_token(yfi):
-...     print(pair)  # WARNING: Will take 12 mins or more to index
->>> len(factory["YFI"])  # Already indexed, almost instantaneous
-73
->>> pair = factory.get_pair(yfi, tokens["USDC"])  # Single contract call
-<uniswap_sdk.v2.Pair address=0xdE37cD310c70e7Fa9d7eD3261515B107D5Fe1F2d>
->>> for route in factory.find_routes(yfi, usdc, depth=3):
-...     # WARNING: For tokens with lots of pairs, exploring at depth of 3
-...     #          or more will take a long time -- use the default of 2
-...     # Routes can be used for path planning now!
+>>> usdc = token["USDC"]
+>>> uni.price(yfi, usdc)
+Decimal("4200.123")
 ```
 
 ## Dependencies
 
-* [python3](https://www.python.org/downloads) version 3.9 or greater, python3-dev
+* [python3](https://www.python.org/downloads) version 3.10 or greater, python3-dev
 
 ## Installation
 
@@ -46,7 +37,7 @@ pip install uniswap_sdk
 You can clone the repository and use [`setuptools`](https://github.com/pypa/setuptools) for the most up-to-date version:
 
 ```bash
-git clone https://github.com/SilverBackLtd/uniswap-sdk.git
+git clone https://github.com/ApeWorX/uniswap-sdk.git
 cd uniswap-sdk
 python3 setup.py install
 ```
