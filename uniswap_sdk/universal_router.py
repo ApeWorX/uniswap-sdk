@@ -1,3 +1,4 @@
+from datetime import timedelta
 from itertools import cycle
 from typing import Any, Callable, ClassVar, Iterable, Optional, Type, Union
 
@@ -643,13 +644,15 @@ class UniversalRouter(ManagerAccessMixin):
 
         return self.contract.execute.as_transaction(*args, **txn_args)
 
-    def execute(self, plan: Plan, deadline: Optional[int] = None, **txn_args) -> ReceiptAPI:
+    def execute(
+        self, plan: Plan, deadline: Union[timedelta, int, None] = None, **txn_args
+    ) -> ReceiptAPI:
         """
         Submit the plan as a transaction and broadcast it
         """
         args: list[Any] = [plan.encoded_commands, plan.encode_args()]
 
         if deadline is not None:
-            args.append(deadline)
+            args.append(deadline if isinstance(deadline, int) else int(deadline.total_seconds()))
 
         return self.contract.execute(*args, **txn_args)
