@@ -1,7 +1,7 @@
 from decimal import Decimal
 from functools import cache
 from itertools import islice, pairwise
-from typing import TYPE_CHECKING, Iterator, Self, cast
+from typing import TYPE_CHECKING, Iterator, cast
 
 from ape.contracts import ContractInstance, ContractLog
 from ape.logging import get_logger
@@ -36,6 +36,8 @@ except ImportError:
 
 
 if TYPE_CHECKING:
+    from typing import Self
+
     from silverback import SilverbackBot
 
 
@@ -504,7 +506,7 @@ class Pair(ManagerAccessMixin):
             self._token1_address = token1
 
     @classmethod
-    def from_log(cls, log: ContractLog) -> Self:
+    def from_log(cls, log: ContractLog) -> "Self":
         return cls(
             address=log.pair,
             token0=log.token0,
