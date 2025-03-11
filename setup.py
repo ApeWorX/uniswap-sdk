@@ -20,6 +20,10 @@ extras_require = {
         "wheel",  # Packaging tool
         "twine",  # Package upload tool
     ],
+    "bot": [
+        "ape-tokens",
+        "silverback",
+    ],
     "dev": [
         "commitizen",  # Manage commits and publishing releases
         "pre-commit",  # Ensure that linters are run prior to commiting
@@ -34,6 +38,7 @@ extras_require["dev"] = (
     extras_require["test"]
     + extras_require["lint"]
     + extras_require["release"]
+    + extras_require["bot"]
     + extras_require["dev"]
 )
 
