@@ -138,9 +138,11 @@ def decode_path(path: bytes) -> list:
 class _V3_EncodePathInput(Command):
     @field_validator("args", mode="before")
     @classmethod
-    def encode_path_input(cls, args: list) -> list:
+    def encode_path_input(cls, args: tuple) -> tuple:
         if isinstance(args[3], list):
-            args[3] = encode_path(args[3])
+            t = list(args)
+            t[3] = encode_path(t[3])
+            args = tuple(t)
 
         return args
 
