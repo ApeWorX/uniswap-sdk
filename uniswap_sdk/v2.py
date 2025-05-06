@@ -81,23 +81,42 @@ class Factory(ManagerAccessMixin):
         return get_contract_instance(V2.UniswapV2Factory, self.provider.chain_id)
 
     def install(self, bot: "SilverbackBot"):
+        from silverback.types import TaskType
 
-        @bot.on_startup()
-        async def _UNISWAP_SDK__index_existing_pairs(snapshot):
+        async def index_existing_pairs(snapshot):
             self._index_all_pairs()
-            # TODO: Install bot into pair as well? To index liquidity and price in real-time?
-            #       (Requires dynamic tasks w/ Silverback)
+
+        # NOTE: Modify name to namespace it from user tasks
+        index_existing_pairs.__name__ = f"uniswap-sdk:{index_existing_pairs.__name__}"
+        bot.broker_task_decorator(TaskType.STARTUP)(index_existing_pairs)
 
         # NOTE: Indexing liquidity and price in real-time reduces amount of work in search algo
-        @bot.on_(self.contract.PairCreated)
-        async def _UNISWAP_SDK__index_new_pair(log):
+        async def index_new_pair(log):
             pair = Pair(log.pair, log.token0, log.token1)
             # Update internal caches
             self._cached_pairs.append(pair)
             self._indexed_pairs.add_edge(log.token0, log.token1, pair=pair)
             self._last_indexed += 1
-            # TODO: Install bot into pair as well? To index liquidity and price in real-time?
-            #       (Requires dynamic tasks w/ Silverback)
+
+        # NOTE: Modify name to namespace it from user tasks
+        index_new_pair.__name__ = f"uniswap-sdk:{index_new_pair.__name__}"
+        bot.broker_task_decorator(TaskType.EVENT_LOG, container=self.contract.PairCreated)(
+            index_new_pair
+        )
+
+        # NOTE: This runs on all deployed pairs from the factory
+        async def sync_pair_liquidity(log):
+            pass
+            # TODO: How to snag `pair` by address?
+            # pair = log.contract_address
+            # pair.reserve0 = log.reserve0
+            # pair.reserve1 = log.reserve1
+
+        # NOTE: Modify name to namespace it from user tasks
+        sync_pair_liquidity.__name__ = f"uniswap-sdk:{sync_pair_liquidity.__name__}"
+        bot.broker_task_decorator(TaskType.EVENT_LOG, container=V2.UniswapV2Pair.Sync)(
+            sync_pair_liquidity
+        )
 
     def get_pair(self, tokenA: AddressType, tokenB: AddressType) -> "Pair":
         if (pair_address := self.contract.getPair(tokenA, tokenB)) == ZERO_ADDRESS:
