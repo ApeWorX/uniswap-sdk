@@ -300,7 +300,11 @@ class Pair(ManagerAccessMixin, BasePair):
         return isinstance(other, Pair) and self.address == other.address
 
     def __repr__(self) -> str:
-        return f"<{self.__class__.__module__}.{self.__class__.__name__} address={self.address} pair='{self.token0.symbol()}/{self.token1.symbol()}'>"
+        return (
+            f"<{self.__class__.__module__}.{self.__class__.__name__} "
+            f"address={self.address} "
+            f"pair='{self.token0.symbol()}/{self.token1.symbol()}'>"
+        )
 
     @cached_property
     def contract(self) -> ContractInstance:

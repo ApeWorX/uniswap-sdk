@@ -12,7 +12,6 @@ from .types import BaseIndex
 from .utils import get_liquidity, get_price
 
 if TYPE_CHECKING:
-    from ape.api import BaseAddress, ReceiptAPI, TransactionAPI
     from silverback import SilverbackBot
 
 

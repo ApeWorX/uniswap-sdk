@@ -72,7 +72,8 @@ class BaseLiquidity(ABC):
         """
         Maxmimum amount of token that can be swapped via pair.
         At most, this should be similar to ``token.balanceOf(pair)``.
-        For pair types that have piecewise liquidity, this can sum the available liquidity in the "buy" direction.
+        For pair types that have piecewise liquidity,
+        this can sum the available liquidity in the "buy" direction.
         """
 
 
