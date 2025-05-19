@@ -30,3 +30,15 @@ def get_liquidity(token: TokenInstance, route) -> Decimal:
 
     assert liquidity != Decimal("inf")
     return liquidity
+
+
+def get_reflexivity(start_token: TokenInstance, route) -> Decimal:
+    token = start_token
+    reflexivity = Decimal("inf")
+
+    for pair in route:
+        reflexivity = min(reflexivity, pair.reflexivity(token))
+        token = pair.other(token)
+
+    assert reflexivity != Decimal("inf")
+    return reflexivity

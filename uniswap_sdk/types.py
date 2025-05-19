@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator, TypeVar
 
 from ape.contracts import ContractInstance
 from ape.types import AddressType
@@ -13,6 +13,8 @@ if TYPE_CHECKING:
 
 PairType = TypeVar("PairType", bound="BasePair")
 Route = tuple[PairType, ...]
+Solution = dict[Decimal, Route]
+Solver = Callable[[TokenInstance, Decimal, Iterable[Route]], Solution]
 
 
 class BaseIndex(ABC):
@@ -151,4 +153,18 @@ class BasePair(ABC):
     def liquidity(self) -> "BaseLiquidity":
         """
         Return an object that is capable of supplying liquidity information
+        """
+
+    # @abstractmethod
+    def reflexivity(
+        self,
+        token: ContractInstance | str,
+        size: Decimal | int | None = Decimal(1),
+        block_id: int | str = "latest",
+    ) -> Decimal:
+        """
+        Relative change in output given swap of ``size`` amount of ``token``,
+        normalized to input ``size`` divided by the pair's current price.
+        Useful for determining maximum swap size when solving.
+        Can be performed at the latest block, or at the block given by ``block_id``.
         """
