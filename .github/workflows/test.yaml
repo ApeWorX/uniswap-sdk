@@ -15,7 +15,7 @@ jobs:
             python-version: "3.10"
 
         - name: Install Dependencies
-          run: pip install .[lint]
+          run: pip install .[lint,bot]
 
         - name: Run Black
           run: black --check .
@@ -38,7 +38,7 @@ jobs:
             python-version: "3.10"
 
         - name: Install Dependencies
-          run: pip install .[lint,test]  # Might need test deps
+          run: pip install .[lint,test,bot]  # Might need test deps
 
         - name: Run MyPy
           run: mypy .
@@ -49,7 +49,7 @@ jobs:
         strategy:
             matrix:
                 os: [ubuntu-latest, macos-latest]   # eventually add `windows-latest`
-                python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+                python-version: ["3.10", "3.11", "3.12", "3.13"]
 
         steps:
         - uses: actions/checkout@v4
