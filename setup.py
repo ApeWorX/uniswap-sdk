@@ -27,6 +27,9 @@ extras_require = {
         "IPython",  # Console for interacting
         "ipdb",  # Debugger (Must use `export PYTHONBREAKPOINT=ipdb.set_trace`)
     ],
+    "bot": [
+        "silverback>=0.7.22",  # Need for linting as it is optional
+    ],
 }
 
 # NOTE: `pip install -e .[dev]` to install package
@@ -34,6 +37,7 @@ extras_require["dev"] = (
     extras_require["test"]
     + extras_require["lint"]
     + extras_require["release"]
+    + extras_require["bot"]
     + extras_require["dev"]
 )
 
@@ -54,10 +58,12 @@ setup(
     include_package_data=True,
     install_requires=[
         "eth-ape>=0.8.33,<1",
+        # Graph library for solving (Requires Python 3.10+)
+        "networkx>=3.4.2,<4",
         # Required plugin for working with tokens
         "ape-tokens>=0.8.5,<1",
     ],
-    python_requires=">=3.9,<4",
+    python_requires=">=3.10,<4",
     extras_require=extras_require,
     py_modules=["uniswap_sdk"],
     license="Apache-2.0",
@@ -73,7 +79,6 @@ setup(
         "Operating System :: MacOS",
         "Operating System :: POSIX",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
