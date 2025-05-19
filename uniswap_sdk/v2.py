@@ -242,7 +242,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
         for edge in self._indexed_pairs[token].values():
             yield edge.get("pair")
 
-    def __getitem__(self, token: TokenInstance | AddressType) -> list["Pair"]:
+    def __getitem__(self, token: TokenInstance | AddressType) -> list[BasePair]:
         return list(self.get_pairs_by_token(token))
 
     def find_routes(
