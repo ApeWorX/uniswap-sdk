@@ -62,8 +62,6 @@ setup(
         "networkx>=3.4.2,<4",
         # Required plugin for working with tokens
         "ape-tokens>=0.8.5,<1",
-        # Required plugin for working with tokens
-        "ape-tokens>=0.8.5,<1",
     ],
     python_requires=">=3.10,<4",
     extras_require=extras_require,
