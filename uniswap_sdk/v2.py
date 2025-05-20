@@ -58,6 +58,9 @@ class Factory(ManagerAccessMixin, BaseIndex):
     def contract(self) -> ContractInstance:
         return get_contract_instance(V2.UniswapV2Factory, self.provider.chain_id)
 
+    def __repr__(self) -> str:
+        return f"<uniswap_sdk.v2.Factory address={self.contract.address}>"
+
     def get_pair(
         self,
         tokenA: TokenInstance | AddressType,
@@ -69,7 +72,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
             tokenB = tokenB.address
 
         try:
-            return self._indexed_pairs[tokenA][tokenB].get("pair")
+            return self._indexed_pairs[tokenA][tokenB]["pair"]
         except KeyError:
             pass  # NOTE: Not indexed, go find it
 
@@ -94,7 +97,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
             addr_a = get_token_address(tokenA)
             addr_b = get_token_address(tokenB)
             try:
-                yield self._indexed_pairs[addr_a][addr_b].get("pair")
+                yield self._indexed_pairs[addr_a][addr_b]["pair"]
             except KeyError:
                 # NOTE: Not indexed, go find it via multicall instead
                 calls[-1].add(self.contract.getPair, tokenA, tokenB)
@@ -187,11 +190,11 @@ class Factory(ManagerAccessMixin, BaseIndex):
         from silverback.types import TaskType
 
         async def index_existing_pairs(snapshot):
-            for idx, pair in enumerate(self.index(tokens=tokens)):
+            for pair in self.index(tokens=tokens):
                 pair.liquidity = _ManagedLiquidity(pair)
 
         # NOTE: Modify name to namespace it from user tasks
-        index_existing_pairs.__name__ = f"uniswap-sdk:{index_existing_pairs.__name__}"
+        index_existing_pairs.__name__ = f"uniswap:v2:{index_existing_pairs.__name__}"
         bot.broker_task_decorator(TaskType.STARTUP)(index_existing_pairs)
 
         async def index_new_pair(log):
@@ -201,7 +204,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
                 self._indexed_pairs.add_edge(log.token0, log.token1, pair=pair)
 
         # NOTE: Modify name to namespace it from user tasks
-        index_new_pair.__name__ = f"uniswap-sdk:{index_new_pair.__name__}"
+        index_new_pair.__name__ = f"uniswap:v2:{index_new_pair.__name__}"
         bot.broker_task_decorator(TaskType.EVENT_LOG, container=self.contract.PairCreated)(
             index_new_pair
         )
@@ -214,7 +217,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
                 pair.liquidity.last_updated = log.block.timestamp
 
         # NOTE: Modify name to namespace it from user tasks
-        sync_pair_liquidity.__name__ = f"uniswap-sdk:{sync_pair_liquidity.__name__}"
+        sync_pair_liquidity.__name__ = f"uniswap:v2:{sync_pair_liquidity.__name__}"
         bot.broker_task_decorator(TaskType.EVENT_LOG, container=V2.UniswapV2Pair.Sync)(
             sync_pair_liquidity
         )
@@ -229,7 +232,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
 
         # Yield pair from edges that have token as node in index
         for edge in self._indexed_pairs[token].values():
-            yield edge.get("pair")
+            yield edge["pair"]
 
     def __getitem__(self, token: TokenInstance | AddressType) -> list[BasePair]:
         return list(self.get_pairs_by_token(token))
@@ -250,7 +253,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
             for edge_paths in nx.all_simple_edge_paths(
                 self._indexed_pairs, start_token, end_token, cutoff=depth
             ):
-                yield tuple(self._indexed_pairs[u][v].get("pair") for u, v in edge_paths)
+                yield tuple(self._indexed_pairs[u][v]["pair"] for u, v in edge_paths)
 
         except nx.NodeNotFound as e:
             raise KeyError(f"Cannot solve: {start_token} or {end_token} is not indexed.") from e
