@@ -83,10 +83,11 @@ class Uniswap(ManagerAccessMixin):
         """
 
         for indexer in self.indexers:
-            version = indexer.__module__.split(".")[-1]
-            logger.info(f"Uniswap {version} - indexing pairs for tokens")
+            version = int(indexer.__module__[-1])
+            pair_name = "pairs" if version < 3 else "pools"
+            logger.info(f"Uniswap v{version} - indexing {pair_name} for tokens")
             pairs_indexed = len(list(indexer.index(tokens=tokens)))
-            logger.success(f"Uniswap {version} - indexed {pairs_indexed} pairs")
+            logger.success(f"Uniswap v{version} - indexed {pairs_indexed} {pair_name}")
 
     def install(
         self,
