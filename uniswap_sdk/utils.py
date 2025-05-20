@@ -20,6 +20,15 @@ def sort_tokens(tokens):
     return (a, b) if (addr_a_int < addr_b_int) else (b, a)
 
 
+def price_to_tick(price: Decimal) -> int:
+    # NOTE: `log_b(a)` can be written as `ln(b) / ln(a)`
+    return int(price.ln() / Decimal("1.0001").ln())
+
+
+def tick_to_price(tick: int) -> Decimal:
+    return Decimal("1.0001") ** tick
+
+
 def get_price(token: TokenInstance, route: Route) -> Decimal:
     price = Decimal(1)
 
