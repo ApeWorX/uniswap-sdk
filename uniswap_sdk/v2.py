@@ -3,7 +3,6 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Iterable, Iterator
 
 import networkx as nx  # type: ignore[import-untyped]
-from ape import convert
 from ape.contracts import ContractInstance
 from ape.types import AddressType
 from ape.utils import ZERO_ADDRESS, ManagerAccessMixin, cached_property
@@ -13,20 +12,10 @@ from eth_utils import to_int
 
 from .packages import V2, get_contract_instance
 from .types import BaseIndex, BasePair, Route
+from .utils import get_token_address, sort_tokens
 
 if TYPE_CHECKING:
     from silverback import SilverbackBot
-
-
-def _token_address(token):
-    return convert(token, AddressType)
-
-
-def _sort_tokens(tokens):
-    a, b = tokens
-    addr_a_int = to_int(hexstr=_token_address(a))
-    addr_b_int = to_int(hexstr=_token_address(b))
-    return (a, b) if (addr_a_int < addr_b_int) else (b, a)
 
 
 class Factory(ManagerAccessMixin, BaseIndex):
@@ -87,7 +76,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
         if (pair_address := self.contract.getPair(tokenA, tokenB)) == ZERO_ADDRESS:
             return None
 
-        if _token_address(tokenA) < _token_address(tokenB):
+        if get_token_address(tokenA) < get_token_address(tokenB):
             return Pair(address=pair_address, token0=tokenA, token1=tokenB)
         else:
             return Pair(address=pair_address, token0=tokenB, token1=tokenA)
@@ -98,12 +87,12 @@ class Factory(ManagerAccessMixin, BaseIndex):
 
         ordered_token_pairs, token_pairs = itertools.tee(itertools.combinations(tokens, 2))
 
-        ordered_token_pairs = map(_sort_tokens, ordered_token_pairs)
+        ordered_token_pairs = map(sort_tokens, ordered_token_pairs)
 
         calls = [multicall.Call()]
         for tokenA, tokenB in token_pairs:
-            addr_a = _token_address(tokenA)
-            addr_b = _token_address(tokenB)
+            addr_a = get_token_address(tokenA)
+            addr_b = get_token_address(tokenB)
             try:
                 yield self._indexed_pairs[addr_a][addr_b].get("pair")
             except KeyError:
