@@ -116,7 +116,7 @@ class Command(BaseModel, ManagerAccessMixin):
         return command_cls(args=command_cls._decode_args(calldata), allow_revert=allow_revert)
 
 
-def encode_path(path: list) -> bytes:
+def encode_path(path: tuple) -> bytes:
     if len(path) % 2 != 1:
         ValueError("Path must be an odd-length sequence of token, fee rate, token, ...")
 
@@ -130,7 +130,7 @@ def decode_path(path: bytes) -> list:
     while len(path) > 0:
         t = next(decoded_type)
         idx = 20 if t == "address" else 3
-        data, path = path[:idx], path[idx:]
+        data, path = bytes(path[:idx]), bytes(path[idx:])
         decoded_path.extend(abi_decode([t], b"\x00" * (12 if t == "address" else 29) + data))
 
     return decoded_path
@@ -140,7 +140,7 @@ class _V3_EncodePathInput(Command):
     @field_validator("args", mode="before")
     @classmethod
     def encode_path_input(cls, args: tuple) -> tuple:
-        if isinstance(args[3], list):
+        if isinstance(args[3], (tuple, list)):
             t = list(args)
             t[3] = encode_path(t[3])
             args = tuple(t)
