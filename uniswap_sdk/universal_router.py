@@ -1,5 +1,6 @@
+from datetime import timedelta
 from itertools import cycle
-from typing import Any, Callable, ClassVar, Iterable, Optional, Type, Union
+from typing import Any, Callable, ClassVar, Iterable, Type, Union
 
 from ape.api import ReceiptAPI, TransactionAPI
 from ape.contracts import ContractInstance
@@ -633,7 +634,7 @@ class UniversalRouter(ManagerAccessMixin):
         return self.decode_plan_from_calldata(HexBytes(txn.data))
 
     def plan_as_transaction(
-        self, plan: Plan, deadline: Optional[int] = None, **txn_args
+        self, plan: Plan, deadline: timedelta | int | None = None, **txn_args
     ) -> TransactionAPI:
         """
         Encode the plan as a transaction for further processing
@@ -641,17 +642,19 @@ class UniversalRouter(ManagerAccessMixin):
         args: list[Any] = [plan.encoded_commands, plan.encode_args()]
 
         if deadline is not None:
-            args.append(deadline)
+            args.append(deadline if isinstance(deadline, int) else int(deadline.total_seconds()))
 
         return self.contract.execute.as_transaction(*args, **txn_args)
 
-    def execute(self, plan: Plan, deadline: Optional[int] = None, **txn_args) -> ReceiptAPI:
+    def execute(
+        self, plan: Plan, deadline: timedelta | int | None = None, **txn_args
+    ) -> ReceiptAPI:
         """
         Submit the plan as a transaction and broadcast it
         """
         args: list[Any] = [plan.encoded_commands, plan.encode_args()]
 
         if deadline is not None:
-            args.append(deadline)
+            args.append(deadline if isinstance(deadline, int) else int(deadline.total_seconds()))
 
         return self.contract.execute(*args, **txn_args)
