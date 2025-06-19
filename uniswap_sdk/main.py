@@ -1,7 +1,6 @@
 from decimal import Decimal
 from typing import TYPE_CHECKING, Iterable
 
-from ape.logging import logger
 from ape.types import AddressType
 from ape.utils import ManagerAccessMixin
 from ape_tokens import Token, TokenInstance
@@ -69,6 +68,7 @@ class Uniswap(ManagerAccessMixin):
     def index(
         self,
         tokens: Iterable[TokenInstance | AddressType] | None = None,
+        min_liquidity: Decimal = Decimal(1),  # 1 token
     ):
         """
         Index all all factory/singleton deployments for enabled versions of protocol.
@@ -83,26 +83,24 @@ class Uniswap(ManagerAccessMixin):
         """
 
         for indexer in self.indexers:
-            version = int(indexer.__module__[-1])
-            pair_name = "pairs" if version < 3 else "pools"
-            logger.info(f"Uniswap v{version} - indexing {pair_name} for tokens")
-            pairs_indexed = len(list(indexer.index(tokens=tokens)))
-            logger.success(f"Uniswap v{version} - indexed {pairs_indexed} {pair_name}")
+            list(indexer.index(tokens=tokens, min_liquidity=min_liquidity))
 
     def install(
         self,
         bot: "SilverbackBot",
         tokens: Iterable[TokenInstance | AddressType] | None = None,
+        min_liquidity: Decimal = Decimal(1),  # 1 token
     ):
 
         for indexer in self.indexers:
-            indexer.install(bot, tokens=tokens)
+            indexer.install(bot, tokens=tokens, min_liquidity=min_liquidity)
 
     # cachetools.cached w/ ttl set to block-time?
     def price(
         self,
         base: TokenInstance | AddressType,
         quote: TokenInstance | AddressType,
+        min_liquidity: Decimal = Decimal(1),  # 1 token
     ) -> Decimal:
         """
         Get price of ``base`` in terms of ``quote``. For example, ETH/USDC is the price of ETH
@@ -133,9 +131,12 @@ class Uniswap(ManagerAccessMixin):
         total_liquidity = Decimal(0)
         for indexer in self.indexers:
             for route in indexer.find_routes(base, quote):
-                if (liquidity := get_liquidity(base, route)).is_zero():
+                if (liquidity := get_liquidity(base, route)) < min_liquidity:
                     continue  # Skip this route (NOTE: `get_price` will raise)
                 price_quotient += get_price(base, route) * liquidity
                 total_liquidity += liquidity
+
+        if total_liquidity == Decimal(0):
+            raise RuntimeError("Could not solve, not enough liquidity")
 
         return price_quotient / total_liquidity

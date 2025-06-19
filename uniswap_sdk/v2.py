@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Iterable, Iterator
 
 import networkx as nx  # type: ignore[import-untyped]
 from ape.contracts import ContractInstance
+from ape.logging import logger
 from ape.types import AddressType
 from ape.utils import ZERO_ADDRESS, ManagerAccessMixin, cached_property
 from ape_ethereum import multicall
@@ -53,7 +54,6 @@ class Factory(ManagerAccessMixin, BaseIndex):
         self._indexed_pairs = nx.Graph()
         self._last_indexed: int = 0
 
-    # non-cached functions
     @cached_property
     def contract(self) -> ContractInstance:
         return get_contract_instance(V2.UniswapV2Factory, self.provider.chain_id)
@@ -84,7 +84,11 @@ class Factory(ManagerAccessMixin, BaseIndex):
         else:
             return Pair(address=pair_address, token0=tokenB, token1=tokenA)
 
-    def get_pairs(self, *tokens: TokenInstance | AddressType) -> Iterator["Pair"]:
+    def get_pairs(
+        self,
+        *tokens: TokenInstance | AddressType,
+        min_liquidity: Decimal = Decimal(1),  # 1 token
+    ) -> Iterator["Pair"]:
         if len(tokens) < 2:
             raise ValueError("Must give at least two tokens to search for pairs")
 
@@ -109,6 +113,9 @@ class Factory(ManagerAccessMixin, BaseIndex):
         for pair_address, (token0, token1) in zip(*pair_addresses, ordered_token_pairs):
             if pair_address != ZERO_ADDRESS:
                 pair = Pair(address=pair_address, token0=token0, token1=token1)
+                if pair.liquidity[token0] < min_liquidity:
+                    continue
+
                 self._indexed_pairs.add_edge(pair.token0.address, pair.token1.address, pair=pair)
                 self._pair_by_address[pair.address] = pair
                 yield pair
@@ -119,9 +126,15 @@ class Factory(ManagerAccessMixin, BaseIndex):
     def index(
         self,
         tokens: Iterable[TokenInstance | AddressType] | None = None,
+        min_liquidity: Decimal = Decimal(1),  # 1 token
     ) -> Iterator["Pair"]:
+        logger.info("Uniswap v2 - indexing")
+        num_pairs = 0
         if tokens:
-            yield from self.get_pairs(*tokens)
+            for pair in self.get_pairs(*tokens, min_liquidity=min_liquidity):
+                yield pair
+                num_pairs += 1
+            logger.success(f"Uniswap v2 - indexed {num_pairs} pairs")
             return  # NOTE: Shortcut for indexing less
 
         # TODO: Reformat to query system when better (using PairCreated)
@@ -176,21 +189,25 @@ class Factory(ManagerAccessMixin, BaseIndex):
             yield_pairs(itertools.chain(call() for call in token_calls)),
         ):
             pair = Pair(address=pair_address, token0=token0, token1=token1)
-            self._indexed_pairs.add_edge(token0, token1, pair=pair)
-            self._pair_by_address[pair.address] = pair
-            yield pair
+            if pair.liquidity[token0] >= min_liquidity:
+                self._indexed_pairs.add_edge(token0, token1, pair=pair)
+                self._pair_by_address[pair.address] = pair
+                yield pair
+                num_pairs += 1
 
+        logger.success(f"Uniswap v2 - indexed {num_pairs} pairs")
         self._last_indexed = num_pairs  # Skip indexing loop next time from this height
 
     def install(
         self,
         bot: "SilverbackBot",
         tokens: Iterable[TokenInstance | AddressType] | None = None,
+        min_liquidity: Decimal = Decimal(1),  # 1 token
     ):
         from silverback.types import TaskType
 
         async def index_existing_pairs(snapshot):
-            for pair in self.index(tokens=tokens):
+            for pair in self.index(tokens=tokens, min_liquidity=min_liquidity):
                 pair.liquidity = _ManagedLiquidity(pair)
 
         # NOTE: Modify name to namespace it from user tasks
@@ -200,8 +217,9 @@ class Factory(ManagerAccessMixin, BaseIndex):
         async def index_new_pair(log):
             if log.token0 in self._indexed_pairs or log.token1 in self._indexed_pairs:
                 pair = Pair(address=log.pair, token0=log.token0, token1=log.token1)
-                pair.liquidity = _ManagedLiquidity(pair)
-                self._indexed_pairs.add_edge(log.token0, log.token1, pair=pair)
+                if pair.liquidity[log.token0] >= min_liquidity:
+                    pair.liquidity = _ManagedLiquidity(pair)
+                    self._indexed_pairs.add_edge(log.token0, log.token1, pair=pair)
 
         # NOTE: Modify name to namespace it from user tasks
         index_new_pair.__name__ = f"uniswap:v2:{index_new_pair.__name__}"

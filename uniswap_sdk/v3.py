@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Iterable, Iterator, cast
 
 import networkx as nx  # type: ignore[import-untyped]
 from ape.contracts import ContractInstance
+from ape.logging import logger
 from ape.types import AddressType
 from ape.utils import ZERO_ADDRESS, ManagerAccessMixin, cached_property
 from ape_ethereum import multicall
@@ -95,6 +96,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
         self,
         *tokens: TokenInstance | AddressType,
         fee: Fee | None = None,  # All fee types
+        min_liquidity: Decimal = Decimal(1),  # 1 token
     ) -> Iterator["Pool"]:
         pool_args: list[dict] = []
         call = multicall.Call()
@@ -115,7 +117,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
                 call.add(self.contract.getPool, tokenA, tokenB, fee)
 
                 # If batch is full, execute it
-                if len(call.calls) > 10_000:
+                if len(call.calls) > 5_000:
                     for pool_address, kwargs in zip(call(), pool_args):
                         if pool_address != ZERO_ADDRESS:
                             pool = Pool(pool_address, **kwargs)
@@ -136,6 +138,9 @@ class Factory(ManagerAccessMixin, BaseIndex):
         for pool_address, kwargs in zip(call(), pool_args):
             if pool_address != ZERO_ADDRESS:
                 pool = Pool(pool_address, **kwargs)
+                if pool.liquidity[kwargs["token0"]] < min_liquidity:
+                    continue
+
                 self._indexed_pools.add_edge(
                     kwargs["token0"],
                     kwargs["token1"],
@@ -148,9 +153,15 @@ class Factory(ManagerAccessMixin, BaseIndex):
     def index(
         self,
         tokens: Iterable[TokenInstance | AddressType] | None = None,
+        min_liquidity: Decimal = Decimal(1),  # 1 token
     ):
+        logger.info("Uniswap v3 - indexing")
+        num_pools = 0
         if tokens:
-            yield from self.get_pools(*tokens)
+            for pool in self.get_pools(*tokens, min_liquidity=min_liquidity):
+                yield pool
+                num_pools += 1
+            logger.success(f"Uniswap v3 - indexed {num_pools} pairs")
             return  # NOTE: Shortcut for indexing less
 
         # NOTE: Uniswap v3 doesn't have a shortcut to iter all pools
@@ -165,18 +176,21 @@ class Factory(ManagerAccessMixin, BaseIndex):
                 fee=log.fee,
                 tick_spacing=log.tickSpacing,
             )
+            if pool.liquidity[log.token0] > min_liquidity:
+                self._indexed_pools.add_edge(log.token0, log.token1, key=log.fee, pool=pool)
+                self._pool_by_address[pool.address] = pool
 
-            self._indexed_pools.add_edge(log.token0, log.token1, key=log.fee, pool=pool)
-            self._pool_by_address[pool.address] = pool
+                yield pool
+                num_pools += 1
 
-            yield pool
-
+        logger.success(f"Uniswap v3 - indexed {num_pools} pairs")
         self._last_cached_block = end_block
 
     def install(
         self,
         bot: "SilverbackBot",
         tokens: Iterable[TokenInstance | AddressType] | None = None,
+        min_liquidity: Decimal = Decimal(1),  # 1 token
     ):
         from silverback.types import TaskType
 
