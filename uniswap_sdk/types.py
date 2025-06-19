@@ -65,6 +65,11 @@ class BaseIndex(ABC):
         ```
         """
 
+    @classmethod
+    @abstractmethod
+    def encode_route(cls, token: TokenInstance, *route: "BasePair") -> tuple:
+        """Convert ``route`` into a UniversalRouter-accepted encoded path."""
+
 
 class BaseLiquidity(ABC):
     """Object that represents a pair's reserves"""

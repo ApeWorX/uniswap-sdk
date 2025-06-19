@@ -276,6 +276,16 @@ class Factory(ManagerAccessMixin, BaseIndex):
         except nx.NodeNotFound as e:
             raise KeyError(f"Cannot solve: {start_token} or {end_token} is not indexed.") from e
 
+    @classmethod
+    def encode_route(cls, token: TokenInstance, *route: "Pair") -> tuple[AddressType, ...]:
+        encoded_path = [token.address]
+
+        for pair in route:
+            token = pair.other(token)
+            encoded_path.append(token.address)
+
+        return tuple(encoded_path)
+
 
 class Pair(ManagerAccessMixin, BasePair):
     """
