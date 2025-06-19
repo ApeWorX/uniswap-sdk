@@ -66,7 +66,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
         return get_contract_instance(V3.UniswapV3Factory, self.provider.chain_id)
 
     def __repr__(self) -> str:
-        return f"<uniswap_sdk.v2.Factory address={self.contract.address}>"
+        return f"<uniswap_sdk.v3.Factory address={self.contract.address}>"
 
     def get_pool(
         self,
@@ -285,7 +285,11 @@ class Pool(ManagerAccessMixin, BasePair):
         return isinstance(other, Pool) and self.address == other.address
 
     def __repr__(self) -> str:
-        return f"<uniswap_sdk.v3.Pool address={self.address} fee={self.fee}>"
+        return (
+            f"<{self.__class__.__module__}.{self.__class__.__name__} "
+            f"address={self.address} "
+            f"pair='{self.token0.symbol()}/{self.token1.symbol()}' fee={self.fee}>"
+        )
 
     @cached_property
     def contract(self) -> ContractInstance:
