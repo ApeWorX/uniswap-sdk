@@ -72,7 +72,7 @@ def convert_solution_to_plan(
 
     plan = ur.Plan()
 
-    for amount_in_route, route in solution.items():
+    for route, amount_in_route in solution.items():
         if all(isinstance(p, v3.Pool) for p in route):
             plan = plan.v3_swap_exact_in(
                 ur.Constants.MSG_SENDER,

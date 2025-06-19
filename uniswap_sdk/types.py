@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 PairType = TypeVar("PairType", bound="BasePair")
 Route = tuple[PairType, ...]
-Solution = dict[Decimal, Route]
+Solution = dict[Route, Decimal]
 Solver = Callable[[TokenInstance, Decimal, Iterable[Route]], Solution]
 
 

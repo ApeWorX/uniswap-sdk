@@ -17,7 +17,7 @@ def solve(token: TokenInstance, needed: Decimal, *routes: Route) -> Solution:
     solution: Solution = {}
     for route in sorted(routes, key=partial(get_price, token)):
         amount = get_liquidity(token, route)
-        solution[min(amount, needed)] = route
+        solution[route] = min(amount, needed)
         needed -= amount
         if needed <= Decimal(0):
             break
