@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator, TypeVar
 
 from ape.contracts import ContractInstance
 from ape.types import AddressType
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 PairType = TypeVar("PairType", bound="BasePair")
 Route = tuple[PairType, ...]
 Solution = dict[Decimal, Route]
+Solver = Callable[[TokenInstance, Decimal, Iterable[Route]], Solution]
 
 
 class BaseIndex(ABC):
