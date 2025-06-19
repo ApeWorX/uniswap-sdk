@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from decimal import Decimal
 from typing import TYPE_CHECKING, Iterable
 
@@ -7,7 +8,7 @@ from ape_tokens import Token, TokenInstance
 
 from . import universal_router as ur
 from . import v2, v3
-from .types import BaseIndex
+from .types import BaseIndex, BasePair
 from .utils import get_liquidity, get_price
 
 if TYPE_CHECKING:
@@ -69,7 +70,7 @@ class Uniswap(ManagerAccessMixin):
         self,
         tokens: Iterable[TokenInstance | AddressType] | None = None,
         min_liquidity: Decimal = Decimal(1),  # 1 token
-    ):
+    ) -> Iterator[BasePair]:
         """
         Index all all factory/singleton deployments for enabled versions of protocol.
 
@@ -83,7 +84,7 @@ class Uniswap(ManagerAccessMixin):
         """
 
         for indexer in self.indexers:
-            list(indexer.index(tokens=tokens, min_liquidity=min_liquidity))
+            yield from indexer.index(tokens=tokens, min_liquidity=min_liquidity)
 
     def install(
         self,
