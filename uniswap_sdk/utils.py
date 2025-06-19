@@ -1,8 +1,32 @@
 from decimal import Decimal
 
+from ape.types import AddressType
 from ape_tokens import TokenInstance
+from eth_utils import to_int
 
 from .types import Route
+
+
+def get_token_address(token):
+    from ape import convert
+
+    return convert(token, AddressType)
+
+
+def sort_tokens(tokens):
+    a, b = tokens
+    addr_a_int = to_int(hexstr=get_token_address(a))
+    addr_b_int = to_int(hexstr=get_token_address(b))
+    return (a, b) if (addr_a_int < addr_b_int) else (b, a)
+
+
+def price_to_tick(price: Decimal) -> int:
+    # NOTE: `log_b(a)` can be written as `ln(b) / ln(a)`
+    return int(price.ln() / Decimal("1.0001").ln())
+
+
+def tick_to_price(tick: int) -> Decimal:
+    return Decimal("1.0001") ** tick
 
 
 def get_price(token: TokenInstance, route: Route) -> Decimal:

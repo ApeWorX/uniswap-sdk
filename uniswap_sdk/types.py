@@ -20,6 +20,7 @@ class BaseIndex(ABC):
     def index(
         self,
         tokens: Iterable[TokenInstance | AddressType] | None = None,
+        min_liquidity: Decimal = Decimal(1),  # 1 token
     ) -> Iterator["BasePair"]: ...
 
     @abstractmethod
@@ -27,6 +28,7 @@ class BaseIndex(ABC):
         self,
         bot: "SilverbackBot",
         tokens: Iterable[TokenInstance | AddressType] | None = None,
+        min_liquidity: Decimal = Decimal(1),  # 1 token
     ): ...
 
     @abstractmethod

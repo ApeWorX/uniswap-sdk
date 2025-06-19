@@ -1,14 +1,14 @@
+from collections.abc import Iterator
 from decimal import Decimal
 from typing import TYPE_CHECKING, Iterable
 
-from ape.logging import logger
 from ape.types import AddressType
 from ape.utils import ManagerAccessMixin
 from ape_tokens import Token, TokenInstance
 
 from . import universal_router as ur
-from . import v2
-from .types import BaseIndex
+from . import v2, v3
+from .types import BaseIndex, BasePair
 from .utils import get_liquidity, get_price
 
 if TYPE_CHECKING:
@@ -44,7 +44,7 @@ class Uniswap(ManagerAccessMixin):
         self,
         use_v1: bool = False,
         use_v2: bool = True,
-        use_v3: bool = False,
+        use_v3: bool = True,
         use_v4: bool = False,
     ):
         self.router = ur.UniversalRouter()
@@ -58,7 +58,7 @@ class Uniswap(ManagerAccessMixin):
             self.indexers.append(v2.Factory())
 
         if use_v3:
-            raise ValueError("Uniswap v3 not supported yet.")
+            self.indexers.append(v3.Factory())
 
         if use_v4:
             raise ValueError("Uniswap v4 not supported yet.")
@@ -69,7 +69,8 @@ class Uniswap(ManagerAccessMixin):
     def index(
         self,
         tokens: Iterable[TokenInstance | AddressType] | None = None,
-    ):
+        min_liquidity: Decimal = Decimal(1),  # 1 token
+    ) -> Iterator[BasePair]:
         """
         Index all all factory/singleton deployments for enabled versions of protocol.
 
@@ -83,25 +84,24 @@ class Uniswap(ManagerAccessMixin):
         """
 
         for indexer in self.indexers:
-            version = indexer.__module__.split(".")[-1]
-            logger.info(f"Uniswap {version} - indexing pairs for tokens")
-            pairs_indexed = len(list(indexer.index(tokens=tokens)))
-            logger.success(f"Uniswap {version} - indexed {pairs_indexed} pairs")
+            yield from indexer.index(tokens=tokens, min_liquidity=min_liquidity)
 
     def install(
         self,
         bot: "SilverbackBot",
         tokens: Iterable[TokenInstance | AddressType] | None = None,
+        min_liquidity: Decimal = Decimal(1),  # 1 token
     ):
 
         for indexer in self.indexers:
-            indexer.install(bot, tokens=tokens)
+            indexer.install(bot, tokens=tokens, min_liquidity=min_liquidity)
 
     # cachetools.cached w/ ttl set to block-time?
     def price(
         self,
         base: TokenInstance | AddressType,
         quote: TokenInstance | AddressType,
+        min_liquidity: Decimal = Decimal(1),  # 1 token
     ) -> Decimal:
         """
         Get price of ``base`` in terms of ``quote``. For example, ETH/USDC is the price of ETH
@@ -132,9 +132,12 @@ class Uniswap(ManagerAccessMixin):
         total_liquidity = Decimal(0)
         for indexer in self.indexers:
             for route in indexer.find_routes(base, quote):
-                if (liquidity := get_liquidity(base, route)).is_zero():
+                if (liquidity := get_liquidity(base, route)) < min_liquidity:
                     continue  # Skip this route (NOTE: `get_price` will raise)
                 price_quotient += get_price(base, route) * liquidity
                 total_liquidity += liquidity
+
+        if total_liquidity == Decimal(0):
+            raise RuntimeError("Could not solve, not enough liquidity")
 
         return price_quotient / total_liquidity
