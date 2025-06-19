@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 PairType = TypeVar("PairType", bound="BasePair")
 Route = tuple[PairType, ...]
+Solution = dict[Decimal, Route]
 
 
 class BaseIndex(ABC):

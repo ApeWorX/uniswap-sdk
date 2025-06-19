@@ -1,10 +1,14 @@
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from ape.types import AddressType
 from ape_tokens import TokenInstance
 from eth_utils import to_int
 
-from .types import Route
+from .types import Route, Solution
+
+if TYPE_CHECKING:
+    from .universal_router import Plan
 
 
 def get_token_address(token):
@@ -54,3 +58,43 @@ def get_liquidity(token: TokenInstance, route) -> Decimal:
 
     assert liquidity != Decimal("inf")
     return liquidity
+
+
+def convert_solution_to_plan(
+    have: TokenInstance,
+    want: TokenInstance,
+    solution: Solution,
+    total_amount_in: Decimal,
+    total_amount_out: Decimal,
+) -> "Plan":
+    from . import universal_router as ur
+    from . import v2, v3
+
+    plan = ur.Plan()
+
+    for amount_in_route, route in solution.items():
+        if all(isinstance(p, v3.Pool) for p in route):
+            plan = plan.v3_swap_exact_in(
+                ur.Constants.MSG_SENDER,
+                int(amount_in_route * 10 ** have.decimals()),
+                # NOTE: Percentage of `total_amount_out` that should come from swap
+                int((amount_in_route / total_amount_in) * total_amount_out) * 10 ** want.decimals(),
+                v3.Factory.encode_route(have, *route),
+                False,  # PayerIsUser
+            )
+
+        elif all(isinstance(p, v2.Pair) for p in route):
+            plan = plan.v2_swap_exact_in(
+                ur.Constants.MSG_SENDER,
+                int(amount_in_route * 10 ** have.decimals()),
+                # NOTE: Percentage of `total_amount_out` that should come from swap
+                int((amount_in_route / total_amount_in) * total_amount_out) * 10 ** want.decimals(),
+                v2.Factory.encode_route(have, *route),
+                False,  # PayerIsUser
+            )
+
+        else:
+            # NOTE: Should never happen
+            raise ValueError(f"Invalid route: {route}")
+
+    return plan
