@@ -344,12 +344,11 @@ class Pool(ManagerAccessMixin, BasePair):
         slot0_at_block = self.contract.slot0(block_id=block_id)
         token0_price = (Decimal(slot0_at_block.sqrtPriceX96)) ** 2 / 2**192
 
+        conversion = 10 ** Decimal(self.token1.decimals() - self.token0.decimals())
         if self.is_token0(token):
-            conversion = 10 ** Decimal(self.other(token).decimals() - token.decimals())
             return token0_price / conversion
 
         else:
-            conversion = 10 ** Decimal(token.decimals() - self.other(token).decimals())
             return conversion / token0_price
 
 
