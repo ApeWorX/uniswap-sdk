@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from decimal import Decimal
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Generic, Iterable, Iterator, TypeVar
 
 from ape.contracts import ContractInstance
@@ -81,7 +82,36 @@ class BaseLiquidity(ABC):
         """
 
 
+class Fee(int, Enum):
+    # From Uniswap V3 SDK
+    LOWEST = 100  # 1 bip
+    LOW_200 = 200
+    LOW_300 = 300
+    LOW_400 = 400
+    LOW = 500  # 0.05%
+    MEDIUM = 3000  # 0.3%
+    HIGH = 10000  # 1.0%
+
+    @property
+    def tick_spacing(self) -> int:
+        return {
+            Fee.LOWEST: 1,
+            Fee.LOW_200: 4,
+            Fee.LOW_300: 6,
+            Fee.LOW_400: 8,
+            Fee.LOW: 10,
+            Fee.MEDIUM: 60,
+            Fee.HIGH: 200,
+        }[self]
+
+    def to_decimal(self) -> Decimal:
+        # Convert to ratio in decimal (for fee math)
+        return self.value / Decimal(10**6)
+
+
 class BasePair(ABC):
+    fee: Fee
+
     def __init__(
         self,
         token0: TokenInstance | AddressType,

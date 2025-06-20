@@ -1,5 +1,4 @@
 from decimal import Decimal
-from enum import Enum
 from itertools import combinations
 from typing import TYPE_CHECKING, Iterable, Iterator, cast
 
@@ -14,7 +13,7 @@ from eth_utils import to_int
 from pydantic import BaseModel, Field
 
 from .packages import V3, get_contract_instance
-from .types import BaseIndex, BaseLiquidity, BasePair, Route
+from .types import BaseIndex, BaseLiquidity, BasePair, Fee, Route
 from .utils import get_token_address, sort_tokens
 
 if TYPE_CHECKING:
@@ -25,33 +24,6 @@ MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342
 
 MIN_TICK = -887272  # price of 2.939e-39
 MAX_TICK = 887272  # price of 3.403e38
-
-
-class Fee(int, Enum):
-    # From Uniswap V3 SDK
-    LOWEST = 100  # 1 bip
-    LOW_200 = 200
-    LOW_300 = 300
-    LOW_400 = 400
-    LOW = 500  # 0.05%
-    MEDIUM = 3000  # 0.3%
-    HIGH = 10000  # 1.0%
-
-    @property
-    def tick_spacing(self) -> int:
-        return {
-            Fee.LOWEST: 1,
-            Fee.LOW_200: 4,
-            Fee.LOW_300: 6,
-            Fee.LOW_400: 8,
-            Fee.LOW: 10,
-            Fee.MEDIUM: 60,
-            Fee.HIGH: 200,
-        }[self]
-
-    def to_decimal(self) -> Decimal:
-        # Convert to ratio in decimal (for fee math)
-        return self.value / Decimal(10**6)
 
 
 class Factory(ManagerAccessMixin, BaseIndex):
