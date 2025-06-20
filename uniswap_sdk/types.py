@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 PairType = TypeVar("PairType", bound="BasePair")
 Route = tuple[PairType, ...]
 Solution = dict[Route, Decimal]
-Solver = Callable[[TokenInstance, Decimal, Iterable[Route]], Solution]
+Solver = Callable[[TokenInstance, TokenInstance, Decimal, Iterable[Route]], Solution]
 
 
 class BaseIndex(ABC, Generic[PairType]):
