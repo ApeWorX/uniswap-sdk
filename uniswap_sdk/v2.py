@@ -12,7 +12,7 @@ from ape_tokens import Token, TokenInstance
 from eth_utils import to_int
 
 from .packages import V2, get_contract_instance
-from .types import BaseIndex, BasePair, Route
+from .types import BaseIndex, BasePair, Fee, Route
 from .utils import get_token_address, sort_tokens
 
 if TYPE_CHECKING:
@@ -303,12 +303,15 @@ class Pair(ManagerAccessMixin, BasePair):
 
     """
 
+    fee: Fee = Fee.MEDIUM  # v2 has a static fee
+
     def __init__(
         self,
         address: AddressType,
         token0: TokenInstance | AddressType | None = None,
         token1: TokenInstance | AddressType | None = None,
     ):
+
         self.address = address
         # NOTE: `None` is not supported by `BasePair`, but we override below
         super().__init__(token0=token0, token1=token1)
