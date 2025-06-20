@@ -43,7 +43,7 @@ def get_price(token: TokenInstance, route: Route) -> Decimal:
     return price
 
 
-def get_liquidity(token: TokenInstance, route) -> Decimal:
+def get_liquidity(token: TokenInstance, route: Route) -> Decimal:
     price = Decimal(1)
     liquidity = Decimal("inf")
 
