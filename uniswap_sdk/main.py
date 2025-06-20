@@ -243,7 +243,7 @@ class Uniswap(ManagerAccessMixin):
             have, want, amount_in, amount_out, max_amount_in, min_amount_out
         )
         routes = self.find_routes(have=have, want=want)
-        return self.solver(have, amount_in, *routes)
+        return self.solver(have, want, amount_in, *routes)
 
     def create_plan(
         self,
