@@ -263,9 +263,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
             raise KeyError(f"Cannot solve: {start_token} or {end_token} is not indexed.") from e
 
     @classmethod
-    def encode_route(
-        cls, token: TokenInstance, *route: "Pool"
-    ) -> tuple[AddressType, Fee, ..., AddressType]:
+    def encode_route(cls, token: TokenInstance, *route: "Pool") -> tuple[AddressType | Fee, ...]:
         encoded_path = [token.address]
 
         for pool in route:
