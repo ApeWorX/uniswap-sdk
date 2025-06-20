@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, TypeVar
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Callable, Generic, Iterable, Iterator, TypeVar
 
 from ape.contracts import ContractInstance
 from ape.types import AddressType
@@ -13,15 +14,17 @@ if TYPE_CHECKING:
 
 PairType = TypeVar("PairType", bound="BasePair")
 Route = tuple[PairType, ...]
+Solution = dict[Route, Decimal]
+Solver = Callable[[TokenInstance, TokenInstance, Decimal, Iterable[Route]], Solution]
 
 
-class BaseIndex(ABC):
+class BaseIndex(ABC, Generic[PairType]):
     @abstractmethod
     def index(
         self,
         tokens: Iterable[TokenInstance | AddressType] | None = None,
         min_liquidity: Decimal = Decimal(1),  # 1 token
-    ) -> Iterator["BasePair"]: ...
+    ) -> Iterator[PairType]: ...
 
     @abstractmethod
     def install(
@@ -32,17 +35,12 @@ class BaseIndex(ABC):
     ): ...
 
     @abstractmethod
-    def __getitem__(self, token: TokenInstance | AddressType) -> list["BasePair"]: ...
+    def __getitem__(self, token: TokenInstance | AddressType) -> list[PairType]: ...
 
     # TODO: others?
     # `.get(tokenA, tokenB) -> BasePair | None` (more generic form of `.get_pair`)
     # `.get_matches(*tokens) -> iter[BasePair]` (more generic form of `.get_pairs`)
     # `.get_all() -> iter[BasePair]` (more generic form of `.get_all_pairs`)
-
-    # TODO: other search methods?
-    # TODO: `.price(tokenA, tokenB) -> Decimal`
-    # TODO: `.depth(tokenA, tokenB) -> Decimal`
-    # TODO: `.solve(size, tokenA, tokenB) -> Iterator[Route]`
 
     @abstractmethod
     def find_routes(
@@ -65,6 +63,11 @@ class BaseIndex(ABC):
         ```
         """
 
+    @classmethod
+    @abstractmethod
+    def encode_route(cls, token: TokenInstance, *route: PairType) -> tuple[Any, ...]:
+        """Convert ``route`` into a UniversalRouter-accepted encoded path."""
+
 
 class BaseLiquidity(ABC):
     """Object that represents a pair's reserves"""
@@ -79,7 +82,36 @@ class BaseLiquidity(ABC):
         """
 
 
+class Fee(int, Enum):
+    # From Uniswap V3 SDK
+    LOWEST = 100  # 1 bip
+    LOW_200 = 200
+    LOW_300 = 300
+    LOW_400 = 400
+    LOW = 500  # 0.05%
+    MEDIUM = 3000  # 0.3%
+    HIGH = 10000  # 1.0%
+
+    @property
+    def tick_spacing(self) -> int:
+        return {
+            Fee.LOWEST: 1,
+            Fee.LOW_200: 4,
+            Fee.LOW_300: 6,
+            Fee.LOW_400: 8,
+            Fee.LOW: 10,
+            Fee.MEDIUM: 60,
+            Fee.HIGH: 200,
+        }[self]
+
+    def to_decimal(self) -> Decimal:
+        # Convert to ratio in decimal (for fee math)
+        return self.value / Decimal(10**6)
+
+
 class BasePair(ABC):
+    fee: Fee
+
     def __init__(
         self,
         token0: TokenInstance | AddressType,
@@ -128,6 +160,9 @@ class BasePair(ABC):
             return self.token1.symbol() == token
         else:
             return self.token1 == token
+
+    def __contains__(self, token: ContractInstance | str) -> bool:
+        return self.is_token0(token) or self.is_token1(token)
 
     def other(self, token: ContractInstance | str) -> TokenInstance:
         if self.is_token0(token):
