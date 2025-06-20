@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Generic, Iterable, Iterator, TypeVar
 
 from ape.contracts import ContractInstance
 from ape.types import AddressType
@@ -17,13 +17,13 @@ Solution = dict[Route, Decimal]
 Solver = Callable[[TokenInstance, Decimal, Iterable[Route]], Solution]
 
 
-class BaseIndex(ABC):
+class BaseIndex(ABC, Generic[PairType]):
     @abstractmethod
     def index(
         self,
         tokens: Iterable[TokenInstance | AddressType] | None = None,
         min_liquidity: Decimal = Decimal(1),  # 1 token
-    ) -> Iterator["BasePair"]: ...
+    ) -> Iterator[PairType]: ...
 
     @abstractmethod
     def install(
@@ -34,17 +34,12 @@ class BaseIndex(ABC):
     ): ...
 
     @abstractmethod
-    def __getitem__(self, token: TokenInstance | AddressType) -> list["BasePair"]: ...
+    def __getitem__(self, token: TokenInstance | AddressType) -> list[PairType]: ...
 
     # TODO: others?
     # `.get(tokenA, tokenB) -> BasePair | None` (more generic form of `.get_pair`)
     # `.get_matches(*tokens) -> iter[BasePair]` (more generic form of `.get_pairs`)
     # `.get_all() -> iter[BasePair]` (more generic form of `.get_all_pairs`)
-
-    # TODO: other search methods?
-    # TODO: `.price(tokenA, tokenB) -> Decimal`
-    # TODO: `.depth(tokenA, tokenB) -> Decimal`
-    # TODO: `.solve(size, tokenA, tokenB) -> Iterator[Route]`
 
     @abstractmethod
     def find_routes(
@@ -69,7 +64,7 @@ class BaseIndex(ABC):
 
     @classmethod
     @abstractmethod
-    def encode_route(cls, token: TokenInstance, *route: "BasePair") -> tuple:
+    def encode_route(cls, token: TokenInstance, *route: PairType) -> tuple[Any, ...]:
         """Convert ``route`` into a UniversalRouter-accepted encoded path."""
 
 
