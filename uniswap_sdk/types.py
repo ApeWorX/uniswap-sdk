@@ -161,6 +161,9 @@ class BasePair(ABC):
         else:
             return self.token1 == token
 
+    def __contains__(self, token: ContractInstance | str) -> bool:
+        return self.is_token0(token) or self.is_token1(token)
+
     def other(self, token: ContractInstance | str) -> TokenInstance:
         if self.is_token0(token):
             return self.token1
