@@ -1,5 +1,3 @@
-from typing import List
-
 from eip712 import EIP712Message, EIP712Type
 
 
@@ -17,6 +15,6 @@ class PermitSingle(EIP712Message):
 
 
 class PermitBatch(EIP712Message):
-    details: List[PermitDetails]
+    details: list[PermitDetails]
     spender: "address"  # type: ignore[name-defined]  # noqa
     sigDeadline: "uint256"  # type: ignore[name-defined]  # noqa
