@@ -117,7 +117,7 @@ def convert_solution_to_plan(
 
         if all(isinstance(p, v3.Pool) for p in route):
             plan = (plan.v3_swap_exact_in if use_exact_in else plan.v3_swap_exact_out)(
-                ur.Constants.MSG_SENDER,
+                receiver or ur.Constants.MSG_SENDER,
                 # NOTE: If `exact_in` this gets interpretted as "exact in", else "max in"
                 amount_in_route,
                 amount_out_route,
@@ -127,7 +127,7 @@ def convert_solution_to_plan(
 
         elif all(isinstance(p, v2.Pair) for p in route):
             plan = (plan.v2_swap_exact_in if use_exact_in else plan.v2_swap_exact_out)(
-                ur.Constants.MSG_SENDER,
+                receiver or ur.Constants.MSG_SENDER,
                 # NOTE: If `exact_in` this gets interpretted as "exact in", else "max in"
                 amount_in_route,
                 amount_out_route,
