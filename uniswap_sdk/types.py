@@ -1,21 +1,79 @@
 from abc import ABC, abstractmethod
 from decimal import Decimal
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Generic, Iterable, Iterator, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Iterable, Iterator, TypeVar
 
 from ape.contracts import ContractInstance
 from ape.types import AddressType
-from ape.utils import cached_property
+from ape.utils import ManagerAccessMixin, cached_property
 from ape_tokens import Token, TokenInstance
 from eth_utils import is_checksum_address
+from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from silverback import SilverbackBot
 
 PairType = TypeVar("PairType", bound="BasePair")
 Route = tuple[PairType, ...]
-Solution = dict[Route, Decimal]
-Solver = Callable[[TokenInstance, TokenInstance, Decimal, Iterable[Route]], Solution]
+
+
+class BaseOrder(BaseModel, ManagerAccessMixin):
+    have: AddressType
+    want: AddressType
+
+    def __init__(self, **model_kwargs):
+        if isinstance(have_token := model_kwargs["have"], TokenInstance):
+            model_kwargs["have"] = have_token.address
+        else:
+            have_token = None
+
+        if isinstance(want_token := model_kwargs["want"], TokenInstance):
+            model_kwargs["want"] = want_token.address
+        else:
+            want_token = None
+
+        super().__init__(**model_kwargs)
+        self._have_token = have_token
+        self._want_token = want_token
+
+    @property
+    def have_token(self) -> TokenInstance:
+        if not self._have_token:
+            self._have_token = Token.at(self.have)
+
+        return self._have_token
+
+    @property
+    def want_token(self) -> TokenInstance:
+        if not self._want_token:
+            self._want_token = Token.at(self.want)
+
+        return self._want_token
+
+    @property
+    def min_price(self) -> Decimal:
+        raise NotImplementedError
+
+
+class ExactInOrder(BaseOrder):
+    amount_in: Decimal = Field(gt=Decimal(0))
+    min_amount_out: Decimal = Field(gt=Decimal(0))
+
+    @property
+    def min_price(self) -> Decimal:
+        return self.min_amount_out / self.amount_in
+
+
+class ExactOutOrder(BaseOrder):
+    max_amount_in: Decimal = Field(gt=Decimal(0))
+    amount_out: Decimal = Field(gt=Decimal(0))
+
+    @property
+    def min_price(self) -> Decimal:
+        return self.amount_out / self.max_amount_in
+
+
+Order = ExactInOrder | ExactOutOrder
 
 
 class BaseIndex(ABC, Generic[PairType]):
@@ -89,8 +147,10 @@ class Fee(int, Enum):
     LOW_300 = 300
     LOW_400 = 400
     LOW = 500  # 0.05%
-    MEDIUM = 3000  # 0.3%
-    HIGH = 10000  # 1.0%
+    MEDIUM = 3_000  # 0.3%
+    HIGH = 10_000  # 1.0%
+
+    MAXIMUM = 1_000_000  # 100%
 
     @property
     def tick_spacing(self) -> int:

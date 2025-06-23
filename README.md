@@ -82,9 +82,10 @@ to obtain better results when performing actions like `uni.swap` which leverage 
 You can override the default solver by providing a function or object which matches the following interface:
 
 ```py
+from uniswap_sdk import Order
 Route = tuple[PairType, ...]  # 1 (or more) `PairType`s (e.g. `UniswapV2Pair`, etc.)
 Solution = dict[Route, Decimal]  # mapping of Route -> amount to swap via Route
-SolverT = Callable[[TokenInstance, Decimal, *Route], Solution]
+SolverType = Callable[[Order, Iterable[Route]], Solution]
 # Given `amount` of `token` and `*routes`, find `solution`
 ```
 
@@ -92,8 +93,8 @@ This can be a class, allowing more flexibility in how you design your solver:
 
 ```py
 class Solver:
-    def __call__(self, have: TokenInstance, amount: Decimal, *route: Route) -> Solution:
-        # This function must match `SolverT` to work
+    def __call__(self, order: Order, routes: Iterable[Route]) -> Solution:
+        # This function must match `SolverType` to work
 
 my_solver = Solver(...)
 
