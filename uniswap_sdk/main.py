@@ -1,5 +1,6 @@
+from collections import defaultdict
 from collections.abc import Iterator
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Iterable
 
@@ -10,6 +11,7 @@ from ape_tokens import Token, TokenInstance
 
 from . import universal_router as ur
 from . import v2, v3
+from .permit2 import Permit2, PermitDetails
 from .solver import Solution, SolverType, convert_solution_to_plan
 from .solver import solve as default_solver
 from .types import BaseIndex, BasePair, ExactInOrder, ExactOutOrder, Order, Route
@@ -53,6 +55,7 @@ class Uniswap(ManagerAccessMixin):
         use_v4: bool = False,
         use_solver: SolverType | None = None,
     ):
+        self.permit2 = Permit2()
         self.router = ur.UniversalRouter()
         self.solver = use_solver or default_solver
 
@@ -307,6 +310,56 @@ class Uniswap(ManagerAccessMixin):
             receiver=receiver,
             **order_kwargs,
         )
+
+        have = order.have_token if order else order_and_txn_kwargs.get("have", order_kwargs["have"])
+        if not isinstance(have, TokenInstance):
+            have = Token.at(have)
+
+        approvals: dict[AddressType, int] = defaultdict(lambda: 0)
+        for amount in map(
+            # NOTE: `amountIn`/`amountInMax` arg (depending on command)
+            lambda c: c.args[1] if c.type in (0x00, 0x08) else c.args[2],
+            # NOTE: Supports Uni V2/V3 EXACT_[IN/OUT] commands
+            filter(lambda c: "SWAP_EXACT" in c.__class__.__name__, plan.commands),
+        ):
+            approvals[have] += amount
+
+        from ape.api import AccountAPI
+
+        if not isinstance(sender := order_and_txn_kwargs.get("sender"), AccountAPI):
+            logger.warning("No `sender` present to sign permits with")
+
+        else:
+            permit2_permits: list[PermitDetails] = []
+            deadline_int = int(
+                (datetime.now(timezone.utc) + (deadline or timedelta(minutes=2))).timestamp()
+            )
+
+            for have, amount in approvals.items():
+                if have.allowance(sender, self.permit2.contract) < amount:
+                    logger.warning(
+                        f"Need to approve '{self.permit2}' to spend {amount} of token '{have}'."
+                    )
+
+                else:
+                    permit2_permits.append(
+                        PermitDetails(  # type: ignore[call-arg]
+                            token=have.address,
+                            amount=amount,
+                            expiration=deadline_int,
+                            nonce=self.permit2.get_nonce(sender, have, self.router.contract),
+                        )
+                    )
+
+            if len(permit2_permits) == 1:
+                plan.commands.insert(
+                    0,
+                    self.permit2.sign_permit(
+                        spender=self.router.contract,
+                        permit=permit2_permits[0],
+                        signer=sender,
+                    ),
+                )
 
         if as_transaction:
             return self.router.plan_as_transaction(plan, deadline=deadline, **order_and_txn_kwargs)
