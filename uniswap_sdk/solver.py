@@ -41,8 +41,8 @@ def solve(order: Order, routes: Iterable[Route]) -> Solution:
                 token,
                 # NOTE: Directed graph is tokenA -> tokenB (set here via :=)
                 (token := pair.other(token)).address,
-                # TODO: Add globally-unique key property (across all 4 versions) to `BasePair`
-                key=pair.address,
+                # NOTE: Edge key must be globally-unique, or will be overwritten
+                key=pair.key,
                 # TODO: Correctly determine `weight` from slippage reflexivity + fee
                 # TODO: Account for gas costs
                 # weight=pair.swap_cost

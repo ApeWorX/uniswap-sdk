@@ -191,6 +191,13 @@ class BasePair(ABC):
         else:
             self._token1_address = token1
 
+    @property
+    def key(self) -> int:
+        # NOTE: For V2, there is only 1 possible pair
+        # NOTE: For V3, there are multiple pools per pair, keyed by fee
+        # TODO: Override for V4, since pools are paired by PoolKey instead of fee
+        return int(self.fee)
+
     @cached_property
     def token0(self) -> TokenInstance:
         return Token.at(self._token0_address)
