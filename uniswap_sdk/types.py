@@ -248,13 +248,27 @@ class BasePair(ABC):
         block_id: int | str = "latest",
     ) -> Decimal:
         """
-        Price of ``token`` relative to the other token in the pair.
-        Can be performed at the latest block, or at the block given by ``block_id``.
+        Price of ``token`` relative to the other token in the pair. Can be performed at the
+        latest block, or at the block given by ``block_id``. Used for routing and solving.
         """
 
     @property
     @abstractmethod
     def liquidity(self) -> "BaseLiquidity":
         """
-        Return an object that is capable of supplying liquidity information
+        Return an object that is capable of supplying liquidity information. Used for routing.
+        """
+
+    @abstractmethod
+    def depth(self, token: ContractInstance | str, price_change: Decimal) -> Decimal:
+        """
+        Maximum amount of `token` that can be swapped that keeps ``.price(token)`` below
+        ``price_change`` (a ratio between 0 and 1, e.g. 5% is 0.05). Required for solving.
+        """
+
+    @abstractmethod
+    def reflexivity(self, token: ContractInstance | str, size: Decimal) -> Decimal:
+        """
+        The relative change in ``.price(token)`` after swapping ``size`` of ``token`` to
+        ``.other(token)``. Is unitless. Required for solving.
         """

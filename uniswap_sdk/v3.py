@@ -334,6 +334,33 @@ class Pool(ManagerAccessMixin, BasePair):
         else:
             return conversion / token0_price
 
+    def depth(self, token: ContractInstance | str, slippage: Decimal) -> Decimal:
+        # TODO: This formula is *NOT RIGHT* as it doesn't account for concentrated liquidity
+        if not isinstance(slippage, Decimal):
+            slippage = Decimal(slippage)
+
+        if not (0 < slippage < 1):
+            raise ValueError(f"Slippage out of bounds: {slippage}. Must be a ratio in (0, 1).")
+
+        # NOTE: Slippage is defined as being a nonzero ratio, however formula expects negative
+        return (self.liquidity[token] / (1 - self.fee.to_decimal())) * (
+            (1 / (1 - slippage).sqrt()) - 1
+        )
+
+    def reflexivity(self, token: ContractInstance | str, size: Decimal) -> Decimal:
+        # TODO: This formula is *NOT RIGHT* as it doesn't account for concentrated liquidity
+        if not isinstance(size, Decimal):
+            size = Decimal(size) / 10 ** Decimal(
+                self.token0.decimals() if self.is_token0(token) else self.token1.decimals()
+            )
+
+        liquidity = self.liquidity[token]
+
+        if not (0 < size < liquidity):
+            raise ValueError(f"Size out of bounds: {size}. Must be nonzero and below {liquidity}.")
+
+        return 1 - (liquidity / (liquidity + (1 - self.fee.to_decimal()) * size)) ** 2
+
 
 class TickReserves(BaseModel):
     gross_liquidity: int = Field(alias="liquidityGross")
