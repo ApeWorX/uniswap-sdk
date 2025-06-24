@@ -36,7 +36,7 @@ The SDK can be used for any scripting task very easily:
 >>> from ape_tokens import tokens
 >>> from uniswap_sdk import Uniswap
 >>> uni = Uniswap(use_v3=False)  # Can skip versions and only index certain tokens
->>> uni.index(tokens=tokens)  # Takes time, but makes planning faster (recommended for scripting)
+>>> list(uni.index(tokens=tokens))  # Takes time, but makes planning faster (recommended for scripting)
 >>> uni.price("UNI", "USDC")  # Get liquidity-weighted prices of entire index in real-time
 Decimal("4.75")
 >>> usdc = tokens["USDC"]
