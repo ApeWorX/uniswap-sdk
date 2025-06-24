@@ -199,17 +199,24 @@ class PERMIT2_PERMIT_BATCH(Command):
 
     definition = [
         ABIType(
-            name="details",
-            type="tuple[]",
+            name="permitBatch",
+            type="tuple",
             components=[
-                ABIType(name="token", type="address"),
-                ABIType(name="amount", type="uint160"),
-                ABIType(name="expiration", type="uint48"),
-                ABIType(name="nonce", type="uint48"),
+                ABIType(
+                    name="details",
+                    type="tuple[]",
+                    components=[
+                        ABIType(name="token", type="address"),
+                        ABIType(name="amount", type="uint160"),
+                        ABIType(name="expiration", type="uint48"),
+                        ABIType(name="nonce", type="uint48"),
+                    ],
+                ),
+                ABIType(name="spender", type="address"),
+                ABIType(name="deadline", type="uint256"),
             ],
         ),
-        ABIType(name="spender", type="address"),
-        ABIType(name="deadline", type="uint256"),
+        ABIType(name="signature", type="bytes"),
     ]
 
 
@@ -272,17 +279,24 @@ class PERMIT2_PERMIT(Command):
 
     definition = [
         ABIType(
-            name="details",
+            name="permit",
             type="tuple",
             components=[
-                ABIType(name="token", type="address"),
-                ABIType(name="amount", type="uint160"),
-                ABIType(name="expiration", type="uint48"),
-                ABIType(name="nonce", type="uint48"),
+                ABIType(
+                    name="details",
+                    type="tuple",
+                    components=[
+                        ABIType(name="token", type="address"),
+                        ABIType(name="amount", type="uint160"),
+                        ABIType(name="expiration", type="uint48"),
+                        ABIType(name="nonce", type="uint48"),
+                    ],
+                ),
+                ABIType(name="spender", type="address"),
+                ABIType(name="deadline", type="uint256"),
             ],
         ),
-        ABIType(name="spender", type="address"),
-        ABIType(name="deadline", type="uint256"),
+        ABIType(name="signature", type="bytes"),
     ]
 
 
