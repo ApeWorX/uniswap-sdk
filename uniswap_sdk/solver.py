@@ -8,7 +8,7 @@ from ape_tokens import TokenInstance
 
 from . import universal_router as ur
 from . import v2, v3
-from .types import Order, Route
+from .types import ExactInOrder, Order, Route
 from .utils import get_total_fee
 
 Solution = dict[Route, Decimal]
@@ -22,8 +22,9 @@ def solve(order: Order, routes: Iterable[Route]) -> Solution:
     ONE_HAVE_TOKEN = Decimal(10 ** order.have_token.decimals())
     G = nx.MultiDiGraph()
     # NOTE: Normalize to units of `have`
-    G.add_node(order.have, demand=-int(order.amount_in * ONE_HAVE_TOKEN))
-    G.add_node(order.want, demand=int(order.amount_in * ONE_HAVE_TOKEN))
+    demand = int(order.amount_in if isinstance(order, ExactInOrder) else order.max_amount_in)
+    G.add_node(order.have, demand=-demand * ONE_HAVE_TOKEN)
+    G.add_node(order.want, demand=demand * ONE_HAVE_TOKEN)
 
     for route in routes:
         token = order.have
@@ -37,21 +38,28 @@ def solve(order: Order, routes: Iterable[Route]) -> Solution:
             except ValueError:  # Uninitialized Pool or Zero Liquidity
                 break  # Skip to next route
 
+            # NOTE: `NetworkX` algos do not work w/ Decimals, only integers
             G.add_edge(
                 token,
                 # NOTE: Directed graph is tokenA -> tokenB (set here via :=)
                 (token := pair.other(token)).address,
                 # NOTE: Edge key must be globally-unique, or will be overwritten
                 key=pair.key,
-                # TODO: Correctly determine `weight` from slippage reflexivity + fee
-                # TODO: Account for gas costs
-                # weight=pair.swap_cost
-                weight=int(pair.fee),  # NOTE: `fee` is already "per unit weight"
-                # TODO: Correctly determine `capacity` from pair depth (% slippage for size in mbps)
-                # capacity=10_000_000 // pair.depth(amount_in / price)
-                # NOTE: `NetworkX` algos do not work w/ Decimals, only integers
-                capacity=int(liquidity * ONE_HAVE_TOKEN),
-                pair=pair,
+                # `capacity` represents the "max demand" that can flow through edge (must be int)
+                capacity=int((depth := pair.depth(token, order.slippage)) / price * ONE_HAVE_TOKEN),
+                # `weight` represents the "cost" of 1 unit of flow (must be int)
+                # TODO: Account for gas costs too
+                weight=int(
+                    # NOTE: Convert `reflexivity` % to bips (must be integer and match fee)
+                    10_000
+                    * (
+                        order.slippage  # NOTE: We already used this to calculate `depth`
+                        if depth < demand * price
+                        # NOTE: Calculate reflexivity "cost" only if pair has enough depth
+                        else pair.reflexivity(token, demand * price)
+                    )
+                ),
+                pair=pair,  # NOTE: Keep this around for converting solution back to routes
             )
 
     try:
