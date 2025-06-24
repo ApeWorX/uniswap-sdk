@@ -122,7 +122,7 @@ def convert_solution_to_plan(
                 amount_in_route,
                 amount_out_route,
                 v3.Factory.encode_route(have, *route),
-                False,  # PayerIsUser (False = Payer is Router)
+                True,  # PayerIsUser (False = Payer is Router)
             )
 
         elif all(isinstance(p, v2.Pair) for p in route):
@@ -132,7 +132,7 @@ def convert_solution_to_plan(
                 amount_in_route,
                 amount_out_route,
                 v2.Factory.encode_route(have, *route),
-                False,  # PayerIsUser (False = Payer is Router)
+                True,  # PayerIsUser (False = Payer is Router)
             )
 
         else:
