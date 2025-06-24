@@ -208,11 +208,15 @@ class Uniswap(ManagerAccessMixin):
                 min_price = self.price(have, want) * (1 - slippage)
                 max_amount_in = amount_out / min_price
 
+            else:
+                slippage = (price := self.price(have, want) - amount_out / max_amount_in) / price
+
             return ExactOutOrder(
                 have=have,
                 want=want,
                 amount_out=amount_out,
                 max_amount_in=max_amount_in,
+                slippage=slippage,
             )
 
         elif amount_in:
@@ -220,11 +224,15 @@ class Uniswap(ManagerAccessMixin):
                 min_price = self.price(have, want) * (1 - slippage)
                 min_amount_out = amount_in * min_price
 
+            else:
+                slippage = (price := self.price(have, want) - min_amount_out / amount_in) / price
+
             return ExactInOrder(
                 have=have,
                 want=want,
                 amount_in=amount_in,
                 min_amount_out=min_amount_out,
+                slippage=slippage,
             )
 
         else:

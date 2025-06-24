@@ -20,6 +20,7 @@ Route = tuple[PairType, ...]
 class BaseOrder(BaseModel, ManagerAccessMixin):
     have: AddressType
     want: AddressType
+    slippage: Decimal
 
     def __init__(self, **model_kwargs):
         if isinstance(have_token := model_kwargs["have"], TokenInstance):
