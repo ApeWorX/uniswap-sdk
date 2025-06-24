@@ -616,7 +616,7 @@ class UniversalRouter(ManagerAccessMixin):
         return get_contract_instance(UNI_ROUTER.UniversalRouter, self.provider.chain_id)
 
     def decode_plan_from_calldata(self, calldata: HexBytes) -> Plan:
-        _, decoded_calldata = self.contract.execute.decode_input(calldata)
+        _, decoded_calldata = self.contract.decode_input(calldata)
         return Plan.decode(decoded_calldata["commands"], decoded_calldata["inputs"])
 
     def decode_plan_from_transaction(self, txn: Union[str, TransactionAPI, ReceiptAPI]) -> Plan:
