@@ -288,6 +288,22 @@ class Uniswap(ManagerAccessMixin):
             receiver=receiver,
         )
 
+    def approve_permit2(
+        self,
+        token: TokenInstance | AddressType,
+        allowance: Decimal | int | str = 2**256 - 1,
+        **txn_kwargs,
+    ) -> "ReceiptAPI":
+        if not isinstance(token, TokenInstance):
+            token = Token.at(self.conversion_manager.convert(token, AddressType))
+
+        if isinstance(allowance, Decimal):
+            allowance = (
+                2**256 - 1 if allowance.is_infinite() else int(allowance * 10 ** token.decimals())
+            )
+
+        return token.approve(self.permit2.contract, allowance, **txn_kwargs)
+
     def swap(
         self,
         order: Order | None = None,
