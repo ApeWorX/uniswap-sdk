@@ -33,6 +33,9 @@ class BaseOrder(BaseModel, ManagerAccessMixin):
 
         super().__init__(**model_kwargs)
 
+    def describe(self) -> str:
+        raise NotImplementedError
+
     @cached_property
     def have_token(self) -> TokenInstance:
         return Token.at(self.have)
@@ -50,6 +53,15 @@ class ExactInOrder(BaseOrder):
     amount_in: Decimal = Field(gt=Decimal(0))
     min_amount_out: Decimal = Field(gt=Decimal(0))
 
+    def describe(self) -> str:
+        have_symbol = self.have_token.symbol()
+        want_symbol = self.want_token.symbol()
+        return (
+            f"Swap {self.amount_in:0.3f} {have_symbol} to "
+            f"at least {self.min_amount_out:0.3f} {want_symbol} "
+            f"@ {self.min_price:0.5f} {want_symbol}/{have_symbol}"
+        )
+
     @model_validator(mode="after")
     def truncate_amounts(self):
         self.amount_in = self.amount_in.quantize(Decimal(f"1e-{self.have_token.decimals()}"))
@@ -66,6 +78,15 @@ class ExactInOrder(BaseOrder):
 class ExactOutOrder(BaseOrder):
     max_amount_in: Decimal = Field(gt=Decimal(0))
     amount_out: Decimal = Field(gt=Decimal(0))
+
+    def describe(self) -> str:
+        have_symbol = self.have_token.symbol()
+        want_symbol = self.want_token.symbol()
+        return (
+            f"Swap at most {self.max_amount_in:0.3f} {have_symbol} to "
+            f"{self.amount_out:0.3f} {want_symbol} "
+            f"@ {self.min_price:0.5f} {want_symbol}/{have_symbol}"
+        )
 
     @model_validator(mode="after")
     def truncate_amounts(self):
@@ -196,6 +217,13 @@ class BasePair(ABC):
             self.token1 = token1
         else:
             self._token1_address = token1
+
+    def describe(self) -> str:
+        return (
+            f"V{self.__class__.__module__[-1]} "
+            f"{self.token0.symbol()}/{self.token1.symbol()} "
+            f"{self.fee.to_decimal() * 100:0.5f}%"
+        )
 
     @property
     def key(self) -> int:
