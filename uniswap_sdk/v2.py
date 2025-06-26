@@ -12,7 +12,7 @@ from ape_tokens import Token, TokenInstance
 from eth_utils import to_int
 
 from .packages import V2, get_contract_instance
-from .types import BaseIndex, BasePair, Route
+from .types import BaseIndex, BasePair, Fee, Route
 from .utils import get_token_address, sort_tokens
 
 if TYPE_CHECKING:
@@ -276,6 +276,16 @@ class Factory(ManagerAccessMixin, BaseIndex):
         except nx.NodeNotFound as e:
             raise KeyError(f"Cannot solve: {start_token} or {end_token} is not indexed.") from e
 
+    @classmethod
+    def encode_route(cls, token: TokenInstance, *route: "Pair") -> tuple[AddressType, ...]:
+        encoded_path = [token.address]
+
+        for pair in route:
+            token = pair.other(token)
+            encoded_path.append(token.address)
+
+        return tuple(encoded_path)
+
 
 class Pair(ManagerAccessMixin, BasePair):
     """
@@ -293,12 +303,15 @@ class Pair(ManagerAccessMixin, BasePair):
 
     """
 
+    fee: Fee = Fee.MEDIUM  # v2 has a static fee
+
     def __init__(
         self,
         address: AddressType,
         token0: TokenInstance | AddressType | None = None,
         token1: TokenInstance | AddressType | None = None,
     ):
+
         self.address = address
         # NOTE: `None` is not supported by `BasePair`, but we override below
         super().__init__(token0=token0, token1=token1)
@@ -352,6 +365,31 @@ class Pair(ManagerAccessMixin, BasePair):
 
         else:
             raise ValueError(f"Token {token} not in pair")
+
+    def depth(self, token: ContractInstance | str, slippage: Decimal | float) -> Decimal:
+        if not isinstance(slippage, Decimal):
+            slippage = Decimal(slippage)
+
+        if not (0 < slippage < 1):
+            raise ValueError(f"Slippage out of bounds: {slippage}. Must be a ratio in (0, 1).")
+
+        # NOTE: Slippage is defined as being a nonzero ratio, however formula expects negative
+        return (self.liquidity[token] / (1 - self.fee.to_decimal())) * (
+            (1 / (1 - slippage).sqrt()) - 1
+        )
+
+    def reflexivity(self, token: ContractInstance | str, size: Decimal | int) -> Decimal:
+        if not isinstance(size, Decimal):
+            size = Decimal(size) / 10 ** Decimal(
+                self.token0.decimals() if self.is_token0(token) else self.token1.decimals()
+            )
+
+        liquidity = self.liquidity[token]
+
+        if not (0 < size < liquidity):
+            raise ValueError(f"Size out of bounds: {size}. Must be nonzero and below {liquidity}.")
+
+        return 1 - (liquidity / (liquidity + (1 - self.fee.to_decimal()) * size)) ** 2
 
 
 class Liquidity:

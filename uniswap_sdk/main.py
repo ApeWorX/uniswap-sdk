@@ -1,17 +1,23 @@
 from collections.abc import Iterator
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING, Iterable
 
+from ape.logging import logger
 from ape.types import AddressType
 from ape.utils import ManagerAccessMixin
 from ape_tokens import Token, TokenInstance
 
 from . import universal_router as ur
 from . import v2, v3
-from .types import BaseIndex, BasePair
+from .permit2 import Permit2, PermitDetails
+from .solver import Solution, SolverType, convert_solution_to_plan
+from .solver import solve as default_solver
+from .types import BaseIndex, BasePair, ExactInOrder, ExactOutOrder, Order, Route
 from .utils import get_liquidity, get_price
 
 if TYPE_CHECKING:
+    from ape.api import BaseAddress, ReceiptAPI, TransactionAPI
     from silverback import SilverbackBot
 
 
@@ -40,14 +46,23 @@ class Uniswap(ManagerAccessMixin):
         ... )
     """
 
+    DEFAULT_SLIPPAGE: Decimal = Decimal(0.005)  # 0.5%
+
     def __init__(
         self,
+        default_slippage: Decimal | float | None = None,
         use_v1: bool = False,
         use_v2: bool = True,
         use_v3: bool = True,
         use_v4: bool = False,
+        use_solver: SolverType | None = None,
     ):
+        if default_slippage is not None:
+            self.DEFAULT_SLIPPAGE = Decimal(default_slippage)
+
+        self.permit2 = Permit2()
         self.router = ur.UniversalRouter()
+        self.solver = use_solver or default_solver
 
         self.indexers: list[BaseIndex] = []
 
@@ -141,3 +156,225 @@ class Uniswap(ManagerAccessMixin):
             raise RuntimeError("Could not solve, not enough liquidity")
 
         return price_quotient / total_liquidity
+
+    def find_routes(
+        self,
+        have: TokenInstance | AddressType,
+        want: TokenInstance | AddressType,
+    ) -> Iterator[Route]:
+        for indexer in self.indexers:
+            for route in indexer.find_routes(have, want):
+                yield route
+
+    def create_order(
+        self,
+        have: TokenInstance | AddressType,
+        want: TokenInstance | AddressType,
+        amount_in: Decimal | str | int | None = None,
+        amount_out: Decimal | str | int | None = None,
+        max_amount_in: Decimal | str | int | None = None,
+        min_amount_out: Decimal | str | int | None = None,
+        slippage: Decimal | float | None = None,
+    ) -> Order:
+        if amount_in and amount_out:
+            raise ValueError("Cannot supply both `amount_in=` and `amount_out=`")
+
+        elif amount_in and max_amount_in:
+            raise ValueError("Cannot supply both `amount_in=` and `max_amount_in=`")
+
+        elif amount_out and min_amount_out:
+            raise ValueError("Cannot supply both `amount_out=` and `min_amount_out=`")
+
+        if not isinstance(have, TokenInstance):
+            have = Token.at(self.conversion_manager.convert(have, AddressType))
+
+        if not isinstance(want, TokenInstance):
+            want = Token.at(self.conversion_manager.convert(want, AddressType))
+
+        if amount_in and not isinstance(amount_in, Decimal):
+            amount_in = Decimal(self.conversion_manager.convert(amount_in, int)) / Decimal(
+                10 ** have.decimals()
+            )
+
+        if max_amount_in and not isinstance(max_amount_in, Decimal):
+            max_amount_in = Decimal(self.conversion_manager.convert(max_amount_in, int)) / Decimal(
+                10 ** have.decimals()
+            )
+
+        if amount_out and not isinstance(amount_out, Decimal):
+            amount_out = Decimal(self.conversion_manager.convert(amount_out, int)) / Decimal(
+                10 ** want.decimals()
+            )
+
+        if min_amount_out and not isinstance(min_amount_out, Decimal):
+            min_amount_out = Decimal(
+                self.conversion_manager.convert(min_amount_out, int)
+            ) / Decimal(10 ** want.decimals())
+
+        if slippage is None:
+            slippage = self.DEFAULT_SLIPPAGE
+
+        elif not isinstance(slippage, Decimal):
+            slippage = Decimal(slippage)
+
+        if amount_out:
+            if not max_amount_in:
+                min_price = self.price(have, want) * (1 - slippage)
+                max_amount_in = amount_out / min_price
+
+            else:  # NOTE: Compute slippage (for solver) based on provided inputs
+                slippage = (
+                    (price := self.price(have, want) - amount_out / max_amount_in) / price
+                ).quantize(Decimal("1e-5"))
+
+            return ExactOutOrder(
+                have=have,
+                want=want,
+                amount_out=amount_out,
+                max_amount_in=max_amount_in,
+                slippage=slippage,
+            )
+
+        elif amount_in:
+            if not min_amount_out:
+                min_price = self.price(have, want) * (1 - slippage)
+                min_amount_out = amount_in * min_price
+
+            else:  # NOTE: Compute slippage (for solver) based on provided inputs
+                slippage = (
+                    (price := self.price(have, want) - min_amount_out / amount_in) / price
+                ).quantize(Decimal("1e-5"))
+
+            return ExactInOrder(
+                have=have,
+                want=want,
+                amount_in=amount_in,
+                min_amount_out=min_amount_out,
+                slippage=slippage,
+            )
+
+        else:
+            raise ValueError("Must supply one of `amount_in=` or `amount_out=`.")
+
+    def solve(
+        self,
+        order: Order | None = None,
+        routes: Iterable[Route] | None = None,
+        **order_kwargs,
+    ) -> Solution:
+        if not order:
+            order = self.create_order(**order_kwargs)
+
+        return self.solver(
+            order,
+            routes or list(self.find_routes(have=order.have, want=order.want)),
+        )
+
+    def create_plan(
+        self,
+        order: Order | None = None,
+        routes: Iterable[Route] | None = None,
+        permit_step: ur.Command | None = None,
+        receiver: "str | BaseAddress | AddressType | None" = None,
+        **order_kwargs,
+    ) -> ur.Plan:
+        if not order:
+            order = self.create_order(**order_kwargs)
+
+        if order.min_price > (market_price := self.price(order.have, order.want)):
+            # NOTE: Give user some feedback but don't stop execution
+            logger.warning(
+                "Swap order might fail to solve or execute: "
+                f"Min price '{order.min_price:0.6f}' higher than market price '{market_price:0.6f}'"
+            )
+
+        solution = self.solve(order=order, route=routes)
+
+        if receiver is not None:
+            receiver = self.conversion_manager.convert(receiver, AddressType)
+
+        return convert_solution_to_plan(
+            order,
+            solution,
+            permit_step=permit_step,
+            receiver=receiver,
+        )
+
+    def approve_permit2(
+        self,
+        token: TokenInstance | AddressType,
+        allowance: Decimal | int | str = 2**256 - 1,
+        **txn_kwargs,
+    ) -> "ReceiptAPI":
+        if not isinstance(token, TokenInstance):
+            token = Token.at(self.conversion_manager.convert(token, AddressType))
+
+        if isinstance(allowance, Decimal):
+            allowance = (
+                2**256 - 1 if allowance.is_infinite() else int(allowance * 10 ** token.decimals())
+            )
+
+        return token.approve(self.permit2.contract, allowance, **txn_kwargs)
+
+    def swap(
+        self,
+        order: Order | None = None,
+        routes: Iterable[Route] | None = None,
+        receiver: "str | BaseAddress | AddressType | None" = None,
+        as_transaction: bool = False,
+        deadline: timedelta | None = None,
+        **order_and_txn_kwargs,
+    ) -> "ReceiptAPI | TransactionAPI":
+        order_kwargs: dict = dict()
+        if not order:
+            field: str  # NOTE: mypy happy
+            for field in set(ExactInOrder.model_fields) | set(ExactOutOrder.model_fields):
+                if field in order_and_txn_kwargs:
+                    order_kwargs[field] = order_and_txn_kwargs.pop(field)
+
+            order = self.create_order(**order_kwargs)
+
+        have = order.have_token if order else order_and_txn_kwargs.get("have", order_kwargs["have"])
+        if not isinstance(have, TokenInstance):
+            have = Token.at(have)
+
+        from ape.api import AccountAPI
+
+        permit_step = None
+        if not isinstance(sender := order_and_txn_kwargs.get("sender"), AccountAPI):
+            logger.warning("No `sender` present to sign permits with")
+
+        elif have.allowance(sender, self.permit2.contract) < (
+            amount := order.amount_in if isinstance(order, ExactInOrder) else order.max_amount_in
+        ):
+            logger.warning(
+                f"Permit2 '{self.permit2.contract}' needs approval from '{sender}' "
+                f"to spend at least {amount} {have.symbol()}."
+            )
+
+        else:
+            expiration = datetime.now(timezone.utc) + (deadline or timedelta(minutes=2))
+            permit_step = self.permit2.sign_permit(
+                spender=self.router.contract,
+                permit=PermitDetails(  # type: ignore[call-arg]
+                    token=have.address,
+                    amount=int(amount * 10 ** have.decimals()),
+                    expiration=int(expiration.timestamp()),
+                    nonce=self.permit2.get_nonce(sender, have, self.router.contract),
+                ),
+                signer=sender,
+            )
+
+        plan = self.create_plan(
+            order=order,
+            routes=routes,
+            permit_step=permit_step,
+            receiver=receiver,
+            **order_kwargs,
+        )
+
+        if as_transaction:
+            return self.router.plan_as_transaction(plan, deadline=deadline, **order_and_txn_kwargs)
+
+        else:
+            return self.router.execute(plan, deadline=deadline, **order_and_txn_kwargs)

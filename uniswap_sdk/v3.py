@@ -1,5 +1,4 @@
 from decimal import Decimal
-from enum import Enum
 from itertools import combinations
 from typing import TYPE_CHECKING, Iterable, Iterator, cast
 
@@ -14,7 +13,7 @@ from eth_utils import to_int
 from pydantic import BaseModel, Field
 
 from .packages import V3, get_contract_instance
-from .types import BaseIndex, BaseLiquidity, BasePair, Route
+from .types import BaseIndex, BaseLiquidity, BasePair, Fee, Route
 from .utils import get_token_address, sort_tokens
 
 if TYPE_CHECKING:
@@ -25,33 +24,6 @@ MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342
 
 MIN_TICK = -887272  # price of 2.939e-39
 MAX_TICK = 887272  # price of 3.403e38
-
-
-class Fee(int, Enum):
-    # From Uniswap V3 SDK
-    LOWEST = 100  # 1 bip
-    LOW_200 = 200
-    LOW_300 = 300
-    LOW_400 = 400
-    LOW = 500  # 0.05%
-    MEDIUM = 3000  # 0.3%
-    HIGH = 10000  # 1.0%
-
-    @property
-    def tick_spacing(self) -> int:
-        return {
-            Fee.LOWEST: 1,
-            Fee.LOW_200: 4,
-            Fee.LOW_300: 6,
-            Fee.LOW_400: 8,
-            Fee.LOW: 10,
-            Fee.MEDIUM: 60,
-            Fee.HIGH: 200,
-        }[self]
-
-    def to_decimal(self) -> Decimal:
-        # Convert to ratio in decimal (for fee math)
-        return self.value / Decimal(10**6)
 
 
 class Factory(ManagerAccessMixin, BaseIndex):
@@ -262,6 +234,17 @@ class Factory(ManagerAccessMixin, BaseIndex):
         except nx.NodeNotFound as e:
             raise KeyError(f"Cannot solve: {start_token} or {end_token} is not indexed.") from e
 
+    @classmethod
+    def encode_route(cls, token: TokenInstance, *route: "Pool") -> tuple[AddressType | Fee, ...]:
+        encoded_path = [token.address]
+
+        for pool in route:
+            encoded_path.append(pool.fee)
+            token = pool.other(token)
+            encoded_path.append(token.address)
+
+        return tuple(encoded_path)
+
 
 class Pool(ManagerAccessMixin, BasePair):
     def __init__(
@@ -350,6 +333,33 @@ class Pool(ManagerAccessMixin, BasePair):
 
         else:
             return conversion / token0_price
+
+    def depth(self, token: ContractInstance | str, slippage: Decimal) -> Decimal:
+        # TODO: This formula is *NOT RIGHT* as it doesn't account for concentrated liquidity
+        if not isinstance(slippage, Decimal):
+            slippage = Decimal(slippage)
+
+        if not (0 < slippage < 1):
+            raise ValueError(f"Slippage out of bounds: {slippage}. Must be a ratio in (0, 1).")
+
+        # NOTE: Slippage is defined as being a nonzero ratio, however formula expects negative
+        return (self.liquidity[token] / (1 - self.fee.to_decimal())) * (
+            (1 / (1 - slippage).sqrt()) - 1
+        )
+
+    def reflexivity(self, token: ContractInstance | str, size: Decimal) -> Decimal:
+        # TODO: This formula is *NOT RIGHT* as it doesn't account for concentrated liquidity
+        if not isinstance(size, Decimal):
+            size = Decimal(size) / 10 ** Decimal(
+                self.token0.decimals() if self.is_token0(token) else self.token1.decimals()
+            )
+
+        liquidity = self.liquidity[token]
+
+        if not (0 < size < liquidity):
+            raise ValueError(f"Size out of bounds: {size}. Must be nonzero and below {liquidity}.")
+
+        return 1 - (liquidity / (liquidity + (1 - self.fee.to_decimal()) * size)) ** 2
 
 
 class TickReserves(BaseModel):

@@ -1,35 +1,10 @@
 # Uniswap SDK
 
-**NOTE: Work In Progress**
-
-## Usage
-
-Uniswap V2 Usage:
-
-```py
->>> from uniswap_sdk import v2
->>> factory = v2.Factory()
->>> for pair in factory.get_all_pairs():
-...     print(pair)  # WARNING: Will take 6 mins or more to fetch
->>> len(list(factory))  # Cached, almost instantaneous afterwards
-396757
->>> from ape_tokens import tokens
->>> yfi = tokens["YFI"]
->>> for pair in factory.get_pairs_by_token(yfi):
-...     print(pair)  # WARNING: Will take 12 mins or more to index
->>> len(factory["YFI"])  # Already indexed, almost instantaneous
-73
->>> pair = factory.get_pair(yfi, tokens["USDC"])  # Single contract call
-<uniswap_sdk.v2.Pair address=0xdE37cD310c70e7Fa9d7eD3261515B107D5Fe1F2d>
->>> for route in factory.find_routes(yfi, usdc, depth=3):
-...     # WARNING: For tokens with lots of pairs, exploring at depth of 3
-...     #          or more will take a long time -- use the default of 2
-...     # Routes can be used for path planning now!
-```
+Ape-based SDK for working with deployments of Uniswap protocol
 
 ## Dependencies
 
-* [python3](https://www.python.org/downloads) version 3.9 or greater, python3-dev
+- [python3](https://www.python.org/downloads) version 3.10 or greater, python3-dev
 
 ## Installation
 
@@ -53,13 +28,96 @@ python3 setup.py install
 
 ## Quick Usage
 
-TODO: Describe library overview in code
+### Scripting
+
+The SDK can be used for any scripting task very easily:
+
+```py
+>>> from ape_tokens import tokens
+>>> from uniswap_sdk import Uniswap
+>>> uni = Uniswap(use_v3=False)  # Can skip versions and only index certain tokens
+>>> list(uni.index(tokens=tokens))  # Takes time, but makes planning faster (recommended for scripting)
+>>> uni.price("UNI", "USDC")  # Get liquidity-weighted prices of entire index in real-time
+Decimal("4.75")
+>>> usdc = tokens["USDC"]
+>>> tx = uni.swap(
+...     "UNI",
+...     usdc,  # Can use any ContractInstance type
+...     amount_in="12 UNI",  # Uses Ape's conversion system
+...     slippage=0.3,
+...     deadline=timedelta(minutes=2),
+...     sender=trader,
+... )
+```
+
+### Silverback
+
+The SDK has special support for use within [Silverback](https://silverback.apeworx.io) bots,
+which takes advantage of real-time processing to drastically reduce the overhead of certain search
+and solver functions of the SDK:
+
+```py
+from ape_tokens import tokens
+from silverback import SilverbackBot
+from uniswap_sdk import Uniswap
+
+bot = SilverbackBot()
+uni = Uniswap()
+uni.install(bot)  # This replaces having to do `uni.index()`
+
+# NOTE: The bot will now process all swaps in the background to keep it's indexes up-to-date!
+
+@bot.cron("* * * * *")
+async def weth_price(t):
+    # So now when you use top-level functions, it takes advantage of cached data in the index
+    return uni.price("WETH", "USDC")  # This executes faster w/ Silverback!
+```
+
+### Custom Solver
+
+The SDK comes with a default Solver that should be performant enough for most situations.
+However, it is likely that you will want to design a custom solver function or class in order
+to obtain better results when performing actions like `uni.swap` which leverage the solver.
+
+You can override the default solver by providing a function or object which matches the following interface:
+
+```py
+from uniswap_sdk import Order
+Route = tuple[PairType, ...]  # 1 (or more) `PairType`s (e.g. `UniswapV2Pair`, etc.)
+Solution = dict[Route, Decimal]  # mapping of Route -> amount to swap via Route
+SolverType = Callable[[Order, Iterable[Route]], Solution]
+# Given `amount` of `token` and `*routes`, find `solution`
+```
+
+This can be a class, allowing more flexibility in how you design your solver:
+
+```py
+class Solver:
+    def __call__(self, order: Order, routes: Iterable[Route]) -> Solution:
+        # This function must match `SolverType` to work
+
+my_solver = Solver(...)
+
+uni = Uniswap(use_solver=my_solver)
+uni.solve(...)  # Will now use `my_solver` to find solutions (also `uni.swap`)
+```
 
 ## Development
 
 This project is in development and should be considered a beta.
 Things might not be in their final state and breaking changes may occur.
 Comments, questions, criticisms and pull requests are welcomed.
+
+### Support
+
+Support for various Uniswap-related protocols:
+
+- [ ] V1
+- [x] V2
+- [x] V3
+- [ ] V4
+- [ ] Permit2
+- [x] UniversalRouter
 
 ## License
 

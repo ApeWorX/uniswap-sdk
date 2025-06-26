@@ -1,5 +1,6 @@
+from datetime import timedelta
 from itertools import cycle
-from typing import Any, Callable, ClassVar, Iterable, Optional, Type, Union
+from typing import Any, Callable, ClassVar, Iterable, Type, Union
 
 from ape.api import ReceiptAPI, TransactionAPI
 from ape.contracts import ContractInstance
@@ -115,7 +116,7 @@ class Command(BaseModel, ManagerAccessMixin):
         return command_cls(args=command_cls._decode_args(calldata), allow_revert=allow_revert)
 
 
-def encode_path(path: list) -> bytes:
+def encode_path(path: tuple) -> bytes:
     if len(path) % 2 != 1:
         ValueError("Path must be an odd-length sequence of token, fee rate, token, ...")
 
@@ -129,7 +130,7 @@ def decode_path(path: bytes) -> list:
     while len(path) > 0:
         t = next(decoded_type)
         idx = 20 if t == "address" else 3
-        data, path = path[:idx], path[idx:]
+        data, path = bytes(path[:idx]), bytes(path[idx:])
         decoded_path.extend(abi_decode([t], b"\x00" * (12 if t == "address" else 29) + data))
 
     return decoded_path
@@ -139,7 +140,7 @@ class _V3_EncodePathInput(Command):
     @field_validator("args", mode="before")
     @classmethod
     def encode_path_input(cls, args: tuple) -> tuple:
-        if isinstance(args[3], list):
+        if isinstance(args[3], (tuple, list)):
             t = list(args)
             t[3] = encode_path(t[3])
             args = tuple(t)
@@ -198,17 +199,24 @@ class PERMIT2_PERMIT_BATCH(Command):
 
     definition = [
         ABIType(
-            name="details",
-            type="tuple[]",
+            name="permitBatch",
+            type="tuple",
             components=[
-                ABIType(name="token", type="address"),
-                ABIType(name="amount", type="uint160"),
-                ABIType(name="expiration", type="uint48"),
-                ABIType(name="nonce", type="uint48"),
+                ABIType(
+                    name="details",
+                    type="tuple[]",
+                    components=[
+                        ABIType(name="token", type="address"),
+                        ABIType(name="amount", type="uint160"),
+                        ABIType(name="expiration", type="uint48"),
+                        ABIType(name="nonce", type="uint48"),
+                    ],
+                ),
+                ABIType(name="spender", type="address"),
+                ABIType(name="deadline", type="uint256"),
             ],
         ),
-        ABIType(name="spender", type="address"),
-        ABIType(name="deadline", type="uint256"),
+        ABIType(name="signature", type="bytes"),
     ]
 
 
@@ -271,17 +279,24 @@ class PERMIT2_PERMIT(Command):
 
     definition = [
         ABIType(
-            name="details",
+            name="permit",
             type="tuple",
             components=[
-                ABIType(name="token", type="address"),
-                ABIType(name="amount", type="uint160"),
-                ABIType(name="expiration", type="uint48"),
-                ABIType(name="nonce", type="uint48"),
+                ABIType(
+                    name="details",
+                    type="tuple",
+                    components=[
+                        ABIType(name="token", type="address"),
+                        ABIType(name="amount", type="uint160"),
+                        ABIType(name="expiration", type="uint48"),
+                        ABIType(name="nonce", type="uint48"),
+                    ],
+                ),
+                ABIType(name="spender", type="address"),
+                ABIType(name="deadline", type="uint256"),
             ],
         ),
-        ABIType(name="spender", type="address"),
-        ABIType(name="deadline", type="uint256"),
+        ABIType(name="signature", type="bytes"),
     ]
 
 
@@ -615,7 +630,7 @@ class UniversalRouter(ManagerAccessMixin):
         return get_contract_instance(UNI_ROUTER.UniversalRouter, self.provider.chain_id)
 
     def decode_plan_from_calldata(self, calldata: HexBytes) -> Plan:
-        _, decoded_calldata = self.contract.execute.decode_input(calldata)
+        _, decoded_calldata = self.contract.decode_input(calldata)
         return Plan.decode(decoded_calldata["commands"], decoded_calldata["inputs"])
 
     def decode_plan_from_transaction(self, txn: Union[str, TransactionAPI, ReceiptAPI]) -> Plan:
@@ -633,7 +648,7 @@ class UniversalRouter(ManagerAccessMixin):
         return self.decode_plan_from_calldata(HexBytes(txn.data))
 
     def plan_as_transaction(
-        self, plan: Plan, deadline: Optional[int] = None, **txn_args
+        self, plan: Plan, deadline: timedelta | int | None = None, **txn_args
     ) -> TransactionAPI:
         """
         Encode the plan as a transaction for further processing
@@ -641,17 +656,19 @@ class UniversalRouter(ManagerAccessMixin):
         args: list[Any] = [plan.encoded_commands, plan.encode_args()]
 
         if deadline is not None:
-            args.append(deadline)
+            args.append(deadline if isinstance(deadline, int) else int(deadline.total_seconds()))
 
         return self.contract.execute.as_transaction(*args, **txn_args)
 
-    def execute(self, plan: Plan, deadline: Optional[int] = None, **txn_args) -> ReceiptAPI:
+    def execute(
+        self, plan: Plan, deadline: timedelta | int | None = None, **txn_args
+    ) -> ReceiptAPI:
         """
         Submit the plan as a transaction and broadcast it
         """
         args: list[Any] = [plan.encoded_commands, plan.encode_args()]
 
         if deadline is not None:
-            args.append(deadline)
+            args.append(deadline if isinstance(deadline, int) else int(deadline.total_seconds()))
 
         return self.contract.execute(*args, **txn_args)
