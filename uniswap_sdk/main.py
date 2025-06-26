@@ -46,7 +46,7 @@ class Uniswap(ManagerAccessMixin):
         ... )
     """
 
-    DEFAULT_SLIPPAGE: Decimal = Decimal(0.005)
+    DEFAULT_SLIPPAGE: Decimal = Decimal(0.005)  # 0.5%
 
     def __init__(
         self,
@@ -222,8 +222,10 @@ class Uniswap(ManagerAccessMixin):
                 min_price = self.price(have, want) * (1 - slippage)
                 max_amount_in = amount_out / min_price
 
-            else:
-                slippage = (price := self.price(have, want) - amount_out / max_amount_in) / price
+            else:  # NOTE: Compute slippage (for solver) based on provided inputs
+                slippage = (
+                    (price := self.price(have, want) - amount_out / max_amount_in) / price
+                ).quantize(Decimal("1e-5"))
 
             return ExactOutOrder(
                 have=have,
@@ -238,8 +240,10 @@ class Uniswap(ManagerAccessMixin):
                 min_price = self.price(have, want) * (1 - slippage)
                 min_amount_out = amount_in * min_price
 
-            else:
-                slippage = (price := self.price(have, want) - min_amount_out / amount_in) / price
+            else:  # NOTE: Compute slippage (for solver) based on provided inputs
+                slippage = (
+                    (price := self.price(have, want) - min_amount_out / amount_in) / price
+                ).quantize(Decimal("1e-5"))
 
             return ExactInOrder(
                 have=have,
