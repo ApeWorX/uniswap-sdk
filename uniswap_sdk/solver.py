@@ -4,7 +4,6 @@ from typing import Callable, Iterable
 
 import networkx as nx  # type: ignore[import-untyped]
 from ape.types import AddressType
-from ape_tokens import TokenInstance
 
 from . import universal_router as ur
 from . import v2, v3
@@ -99,18 +98,28 @@ def solve(order: Order, routes: Iterable[Route]) -> Solution:
 
 
 def convert_solution_to_plan(
+    order: Order,
     solution: Solution,
-    have: TokenInstance,
-    want: TokenInstance,
-    total_amount_out: Decimal = Decimal(0),
-    use_exact_in: bool = True,
+    permit_step: ur.Command | None = None,
     receiver: AddressType | None = None,
 ) -> ur.Plan:
-    ONE_HAVE_TOKEN = 10 ** have.decimals()
-    ONE_WANT_TOKEN = 10 ** want.decimals()
+    ONE_HAVE_TOKEN = 10 ** order.have_token.decimals()
+    ONE_WANT_TOKEN = 10 ** order.want_token.decimals()
+
+    use_exact_in = isinstance(order, ExactInOrder)
     total_amount_in = sum(solution.values())
+    total_amount_out = order.min_amount_out if use_exact_in else order.amount_out
 
     plan = ur.Plan()
+    if permit_step:
+        plan = plan.add(permit_step)
+
+    # TODO: Add donation support
+    if receiver is None:
+        receiver = ur.Constants.MSG_SENDER
+
+    payer_is_user = True  # False = Payer is Router
+
     for route, amount_in_route in solution.items():
         total_fee = get_total_fee(route)
 
@@ -119,29 +128,45 @@ def convert_solution_to_plan(
             total_amount_out
             * (amount_in_route / total_amount_in)
             * (1 - total_fee)
-            * ONE_WANT_TOKEN
         )
-        amount_in_route = int(amount_in_route * ONE_HAVE_TOKEN)  # type: ignore[assignment]
 
         if all(isinstance(p, v3.Pool) for p in route):
-            plan = (plan.v3_swap_exact_in if use_exact_in else plan.v3_swap_exact_out)(
-                receiver or ur.Constants.MSG_SENDER,
-                # NOTE: If `exact_in` this gets interpretted as "exact in", else "max in"
-                amount_in_route,
-                amount_out_route,
-                v3.Factory.encode_route(have, *route),
-                True,  # PayerIsUser (False = Payer is Router)
-            )
+            if use_exact_in:
+                plan = plan.v3_swap_exact_in(
+                    receiver,
+                    int(amount_in_route * ONE_HAVE_TOKEN),  # amountIn
+                    int(amount_out_route * ONE_WANT_TOKEN),  # amountOutMin
+                    v3.Factory.encode_route(order.have_token, *route),
+                    payer_is_user,
+                )
+
+            else:
+                plan = plan.v3_swap_exact_out(
+                    receiver,
+                    int(amount_out_route * ONE_WANT_TOKEN),  # amountOut
+                    int(amount_in_route * ONE_HAVE_TOKEN),  # amountInMax
+                    v3.Factory.encode_route(order.have_token, *route),
+                    payer_is_user,
+                )
 
         elif all(isinstance(p, v2.Pair) for p in route):
-            plan = (plan.v2_swap_exact_in if use_exact_in else plan.v2_swap_exact_out)(
-                receiver or ur.Constants.MSG_SENDER,
-                # NOTE: If `exact_in` this gets interpretted as "exact in", else "max in"
-                amount_in_route,
-                amount_out_route,
-                v2.Factory.encode_route(have, *route),
-                True,  # PayerIsUser (False = Payer is Router)
-            )
+            if use_exact_in:
+                plan = plan.v2_swap_exact_in(
+                    receiver,
+                    int(amount_in_route * ONE_HAVE_TOKEN),  # amountIn
+                    int(amount_out_route * ONE_WANT_TOKEN),  # amountOutMin
+                    v2.Factory.encode_route(order.have_token, *route),
+                    payer_is_user,
+                )
+
+            else:
+                plan = plan.v2_swap_exact_out(
+                    receiver,
+                    int(amount_out_route * ONE_WANT_TOKEN),  # amountOut
+                    int(amount_in_route * ONE_HAVE_TOKEN),  # amountInMax
+                    v2.Factory.encode_route(order.have_token, *route),
+                    payer_is_user,
+                )
 
         else:
             # NOTE: Should never happen

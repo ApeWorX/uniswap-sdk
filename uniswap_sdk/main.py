@@ -1,4 +1,3 @@
-from collections import defaultdict
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -259,6 +258,7 @@ class Uniswap(ManagerAccessMixin):
         self,
         order: Order | None = None,
         routes: Iterable[Route] | None = None,
+        permit_step: ur.Command | None = None,
         receiver: "str | BaseAddress | AddressType | None" = None,
         **order_kwargs,
     ) -> ur.Plan:
@@ -278,13 +278,9 @@ class Uniswap(ManagerAccessMixin):
             receiver = self.conversion_manager.convert(receiver, AddressType)
 
         return convert_solution_to_plan(
+            order,
             solution,
-            order.have_token,
-            order.want_token,
-            total_amount_out=(
-                order.min_amount_out if isinstance(order, ExactInOrder) else order.amount_out
-            ),
-            use_exact_in=isinstance(order, ExactInOrder),
+            permit_step=permit_step,
             receiver=receiver,
         )
 
@@ -320,62 +316,46 @@ class Uniswap(ManagerAccessMixin):
                 if field in order_and_txn_kwargs:
                     order_kwargs[field] = order_and_txn_kwargs.pop(field)
 
-        plan = self.create_plan(
-            order=order,
-            routes=routes,
-            receiver=receiver,
-            **order_kwargs,
-        )
+            order = self.create_order(**order_kwargs)
 
         have = order.have_token if order else order_and_txn_kwargs.get("have", order_kwargs["have"])
         if not isinstance(have, TokenInstance):
             have = Token.at(have)
 
-        approvals: dict[AddressType, int] = defaultdict(lambda: 0)
-        for amount in map(
-            # NOTE: `amountIn`/`amountInMax` arg (depending on command)
-            lambda c: c.args[1] if c.type in (0x00, 0x08) else c.args[2],
-            # NOTE: Supports Uni V2/V3 EXACT_[IN/OUT] commands
-            filter(lambda c: "SWAP_EXACT" in c.__class__.__name__, plan.commands),
-        ):
-            approvals[have] += amount
-
         from ape.api import AccountAPI
 
+        permit_step = None
         if not isinstance(sender := order_and_txn_kwargs.get("sender"), AccountAPI):
             logger.warning("No `sender` present to sign permits with")
 
-        else:
-            permit2_permits: list[PermitDetails] = []
-            deadline_int = int(
-                (datetime.now(timezone.utc) + (deadline or timedelta(minutes=2))).timestamp()
+        elif have.allowance(sender, self.permit2.contract) < (
+            amount := order.amount_in if isinstance(order, ExactInOrder) else order.max_amount_in
+        ):
+            logger.warning(
+                f"Permit2 '{self.permit2.contract}' needs approval from '{sender}' "
+                f"to spend at least {amount} {have.symbol()}."
             )
 
-            for have, amount in approvals.items():
-                if have.allowance(sender, self.permit2.contract) < amount:
-                    logger.warning(
-                        f"Need to approve '{self.permit2}' to spend {amount} of token '{have}'."
-                    )
+        else:
+            expiration = datetime.now(timezone.utc) + (deadline or timedelta(minutes=2))
+            permit_step = self.permit2.sign_permit(
+                spender=self.router.contract,
+                permit=PermitDetails(  # type: ignore[call-arg]
+                    token=have.address,
+                    amount=int(amount * 10 ** have.decimals()),
+                    expiration=int(expiration.timestamp()),
+                    nonce=self.permit2.get_nonce(sender, have, self.router.contract),
+                ),
+                signer=sender,
+            )
 
-                else:
-                    permit2_permits.append(
-                        PermitDetails(  # type: ignore[call-arg]
-                            token=have.address,
-                            amount=amount,
-                            expiration=deadline_int,
-                            nonce=self.permit2.get_nonce(sender, have, self.router.contract),
-                        )
-                    )
-
-            if len(permit2_permits) == 1:
-                plan.commands.insert(
-                    0,
-                    self.permit2.sign_permit(
-                        spender=self.router.contract,
-                        permit=permit2_permits[0],
-                        signer=sender,
-                    ),
-                )
+        plan = self.create_plan(
+            order=order,
+            routes=routes,
+            permit_step=permit_step,
+            receiver=receiver,
+            **order_kwargs,
+        )
 
         if as_transaction:
             return self.router.plan_as_transaction(plan, deadline=deadline, **order_and_txn_kwargs)
