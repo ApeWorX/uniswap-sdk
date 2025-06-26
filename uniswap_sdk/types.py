@@ -8,7 +8,7 @@ from ape.types import AddressType
 from ape.utils import ManagerAccessMixin, cached_property
 from ape_tokens import Token, TokenInstance
 from eth_utils import is_checksum_address
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 if TYPE_CHECKING:
     from silverback import SilverbackBot
@@ -24,32 +24,22 @@ class BaseOrder(BaseModel, ManagerAccessMixin):
 
     def __init__(self, **model_kwargs):
         if isinstance(have_token := model_kwargs["have"], TokenInstance):
+            self.have_token = have_token
             model_kwargs["have"] = have_token.address
-        else:
-            have_token = None
 
         if isinstance(want_token := model_kwargs["want"], TokenInstance):
+            self.want_token = want_token
             model_kwargs["want"] = want_token.address
-        else:
-            want_token = None
 
         super().__init__(**model_kwargs)
-        self._have_token = have_token
-        self._want_token = want_token
 
-    @property
+    @cached_property
     def have_token(self) -> TokenInstance:
-        if not self._have_token:
-            self._have_token = Token.at(self.have)
+        return Token.at(self.have)
 
-        return self._have_token
-
-    @property
+    @cached_property
     def want_token(self) -> TokenInstance:
-        if not self._want_token:
-            self._want_token = Token.at(self.want)
-
-        return self._want_token
+        return Token.at(self.want)
 
     @property
     def min_price(self) -> Decimal:
@@ -60,6 +50,14 @@ class ExactInOrder(BaseOrder):
     amount_in: Decimal = Field(gt=Decimal(0))
     min_amount_out: Decimal = Field(gt=Decimal(0))
 
+    @model_validator(mode="after")
+    def truncate_amounts(self):
+        self.amount_in = self.amount_in.quantize(Decimal(f"1e-{self.have_token.decimals()}"))
+        self.min_amount_out = self.min_amount_out.quantize(
+            Decimal(f"1e-{self.want_token.decimals()}")
+        )
+        return self
+
     @property
     def min_price(self) -> Decimal:
         return self.min_amount_out / self.amount_in
@@ -68,6 +66,14 @@ class ExactInOrder(BaseOrder):
 class ExactOutOrder(BaseOrder):
     max_amount_in: Decimal = Field(gt=Decimal(0))
     amount_out: Decimal = Field(gt=Decimal(0))
+
+    @model_validator(mode="after")
+    def truncate_amounts(self):
+        self.max_amount_in = self.max_amount_in.quantize(
+            Decimal(f"1e-{self.have_token.decimals()}")
+        )
+        self.amount_out = self.amount_out.quantize(Decimal(f"1e-{self.want_token.decimals()}"))
+        return self
 
     @property
     def min_price(self) -> Decimal:
