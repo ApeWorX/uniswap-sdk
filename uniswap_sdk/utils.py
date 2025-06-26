@@ -1,11 +1,12 @@
+from collections.abc import Iterator
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 
 from ape.types import AddressType
 from ape_tokens import TokenInstance
 from eth_utils import to_int
 
-from .types import Fee, Route
+from .types import BasePair, Fee, Route
 
 if TYPE_CHECKING:
     pass
@@ -71,3 +72,34 @@ def get_total_fee(route: Route) -> Decimal:
 
     # NOTE: Doing it as a ratio as it's cleaner to understand
     return 1 - ratio  # "fee" is the delta between the loss ratio and 1
+
+
+def convert_flows_to_routes(
+    flows: dict[AddressType, dict[AddressType, dict[Any, int]]],
+    start: AddressType,
+    end: AddressType,
+    get_pair: Callable[[AddressType, AddressType, Any], "BasePair"],
+    execute_in_reverse: bool = False,
+) -> Iterator[tuple[Route, int]]:
+    # Convert NetworkX "flowDict" to `Solution`
+    # `Flow` solution layout is `{Token => {Token => {Key => Int}}}`
+    # `Solution` layout needs to be `{(Pair, ...): Amount}`
+    # NOTE: Flow can contain `Amount = 0` or can be an empty mapping, so filter that out
+    for token, key_amount in flows[start].items():
+        for key, amount in key_amount.items():
+            if amount == 0:
+                continue
+
+            pair = get_pair(start, token, key)
+
+            if token == end:
+                yield (pair,), amount
+                continue  # NOTE: No need to recurse further
+
+            for inner_flow, inner_amount in convert_flows_to_routes(
+                flows, token, end, get_pair, execute_in_reverse=execute_in_reverse
+            ):
+                if execute_in_reverse:
+                    yield (*inner_flow, pair), min(amount, inner_amount)
+                else:
+                    yield (pair, *inner_flow), min(amount, inner_amount)
