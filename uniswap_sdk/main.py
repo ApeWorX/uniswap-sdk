@@ -46,14 +46,20 @@ class Uniswap(ManagerAccessMixin):
         ... )
     """
 
+    DEFAULT_SLIPPAGE: Decimal = Decimal(0.005)
+
     def __init__(
         self,
+        default_slippage: Decimal | float | None = None,
         use_v1: bool = False,
         use_v2: bool = True,
         use_v3: bool = True,
         use_v4: bool = False,
         use_solver: SolverType | None = None,
     ):
+        if default_slippage is not None:
+            self.DEFAULT_SLIPPAGE = Decimal(default_slippage)
+
         self.permit2 = Permit2()
         self.router = ur.UniversalRouter()
         self.solver = use_solver or default_solver
@@ -168,7 +174,7 @@ class Uniswap(ManagerAccessMixin):
         amount_out: Decimal | str | int | None = None,
         max_amount_in: Decimal | str | int | None = None,
         min_amount_out: Decimal | str | int | None = None,
-        slippage: Decimal = Decimal(0.005),
+        slippage: Decimal | float | None = None,
     ) -> Order:
         if amount_in and amount_out:
             raise ValueError("Cannot supply both `amount_in=` and `amount_out=`")
@@ -204,6 +210,12 @@ class Uniswap(ManagerAccessMixin):
             min_amount_out = Decimal(
                 self.conversion_manager.convert(min_amount_out, int)
             ) / Decimal(10 ** want.decimals())
+
+        if slippage is None:
+            slippage = self.DEFAULT_SLIPPAGE
+
+        elif not isinstance(slippage, Decimal):
+            slippage = Decimal(slippage)
 
         if amount_out:
             if not max_amount_in:
