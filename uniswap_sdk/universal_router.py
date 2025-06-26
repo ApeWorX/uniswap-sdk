@@ -347,156 +347,47 @@ class BALANCE_CHECK_ERC20(Command):
     ]
 
 
-class SEAPORT_V1_5(Command):
+class V4_SWAP(_V3_EncodePathInput, Command):
     type = 0x10
 
     definition = [
-        ABIType(name="value", type="uint256"),
-        ABIType(name="data", type="bytes"),
+        ABIType(name="action", type="uint256"),
+        ABIType(name="params", type="bytes"),
     ]
 
+    # TODO: Decode action
 
-class LOOKS_RARE_V2(Command):
+
+class V3_POSTION_MANAGER_PERMIT(Command):
     type = 0x11
 
-    definition = [
-        ABIType(name="value", type="uint256"),
-        ABIType(name="data", type="bytes"),
-    ]
 
-
-class NFTX(Command):
+class V3_POSTION_MANAGER_CALL(Command):
     type = 0x12
 
-    definition = [
-        ABIType(name="value", type="uint256"),
-        ABIType(name="data", type="bytes"),
-    ]
 
-
-class CRYPTOPUNKS(Command):
+class V4_INITIALIZE_POOL(Command):
     type = 0x13
 
     definition = [
-        ABIType(name="punk_id", type="uint256"),
-        ABIType(name="recipient", type="address"),
-        ABIType(name="value", type="uint256"),
+        ABIType(
+            name="poolKey",
+            type="tuple",
+            components=[
+                ABIType(name="currency0", type="address", internalType="Currency"),
+                ABIType(name="currency1", type="address", internalType="Currency"),
+                ABIType(name="fee", type="uint24"),
+                ABIType(name="tickSpacing", type="int24"),
+                ABIType(name="hooks", type="address", internalType="IHooks"),
+            ],
+            internalType="PoolKey",
+        ),
+        ABIType(name="sqrtPriceX96", type="uint160"),
     ]
 
 
-class OWNER_CHECK_721(Command):
-    type = 0x15
-
-    definition = [
-        ABIType(name="owner", type="address"),
-        ABIType(name="token", type="address"),
-        ABIType(name="token_id", type="uint256"),
-    ]
-
-
-class OWNER_CHECK_1155(Command):
-    type = 0x16
-
-    definition = [
-        ABIType(name="owner", type="address"),
-        ABIType(name="token", type="address"),
-        ABIType(name="token_id", type="uint256"),
-        ABIType(name="min_balance", type="uint256"),
-    ]
-
-
-class SWEEP_ERC721(Command):
-    type = 0x17
-
-    definition = [
-        ABIType(name="token", type="address"),
-        ABIType(name="recipient", type="address"),
-        ABIType(name="token_id", type="uint256"),
-    ]
-
-
-class X2Y2_721(Command):
-    type = 0x18
-
-    definition = [
-        ABIType(name="value", type="uint256"),
-        ABIType(name="data", type="bytes"),
-        ABIType(name="recipient", type="address"),
-        ABIType(name="token", type="address"),
-        ABIType(name="token_id", type="uint256"),
-    ]
-
-
-class SUDOSWAP(Command):
-    type = 0x19
-
-    definition = [
-        ABIType(name="value", type="uint256"),
-        ABIType(name="data", type="bytes"),
-    ]
-
-
-class NFT20(Command):
-    type = 0x1A
-
-    definition = [
-        ABIType(name="value", type="uint256"),
-        ABIType(name="data", type="bytes"),
-    ]
-
-
-class X2Y2_1155(Command):
-    type = 0x1B
-
-    definition = [
-        ABIType(name="value", type="uint256"),
-        ABIType(name="data", type="bytes"),
-        ABIType(name="recipient", type="address"),
-        ABIType(name="token", type="address"),
-        ABIType(name="token_id", type="uint256"),
-        ABIType(name="amount", type="uint256"),
-    ]
-
-
-class FOUNDATION(Command):
-    type = 0x1C
-
-    definition = [
-        ABIType(name="value", type="uint256"),
-        ABIType(name="data", type="bytes"),
-        ABIType(name="recipient", type="address"),
-        ABIType(name="token", type="address"),
-        ABIType(name="token_id", type="uint256"),
-    ]
-
-
-class SWEEP_ERC1155(Command):
-    type = 0x1D
-
-    definition = [
-        ABIType(name="token", type="address"),
-        ABIType(name="recipient", type="address"),
-        ABIType(name="token_id", type="uint256"),
-        ABIType(name="amount", type="uint256"),
-    ]
-
-
-class ELEMENT_MARKET(Command):
-    type = 0x1E
-
-    definition = [
-        ABIType(name="value", type="uint256"),
-        ABIType(name="data", type="bytes"),
-    ]
-
-
-class SEAPORT_V1_4(Command):
-    type = 0x20
-
-    definition = [
-        ABIType(name="value", type="uint256"),
-        ABIType(name="data", type="bytes"),
-    ]
+class V4_POSTION_MANAGER_CALL(Command):
+    type = 0x14
 
 
 class EXECUTE_SUB_PLAN(Command):
