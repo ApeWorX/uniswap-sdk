@@ -50,6 +50,13 @@ Decimal("4.75")
 ... )
 ```
 
+### CLI
+
+This SDK installs a special CLI command `uni`.
+You can use this command to do common tasks with the SDK such as finding prices or performing swaps.
+
+Try `uni --help` after installing the SDK to learn more about what the CLI can do.
+
 ### Silverback
 
 The SDK has special support for use within [Silverback](https://silverback.apeworx.io) bots,
