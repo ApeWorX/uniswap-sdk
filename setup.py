@@ -63,6 +63,9 @@ setup(
         # Required plugin for working with tokens
         "ape-tokens>=0.8.5,<1",
     ],
+    entry_points={
+        "console_scripts": ["uni=uniswap_sdk._cli:cli"],
+    },
     python_requires=">=3.10,<4",
     extras_require=extras_require,
     py_modules=["uniswap_sdk"],
