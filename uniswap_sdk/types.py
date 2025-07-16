@@ -110,7 +110,6 @@ class BaseIndex(ABC, ManagerAccessMixin, Generic[PairType]):
     def index(
         self,
         tokens: Iterable[ConvertsToToken] | None = None,
-        min_liquidity: Decimal = Decimal(1),  # 1 token
     ) -> Iterator[PairType]: ...
 
     @abstractmethod
@@ -118,7 +117,6 @@ class BaseIndex(ABC, ManagerAccessMixin, Generic[PairType]):
         self,
         bot: "SilverbackBot",
         tokens: Iterable[ConvertsToToken] | None = None,
-        min_liquidity: Decimal = Decimal(1),  # 1 token
     ): ...
 
     @abstractmethod

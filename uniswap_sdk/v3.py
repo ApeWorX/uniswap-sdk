@@ -76,7 +76,6 @@ class Factory(BaseIndex):
         self,
         *tokens: ConvertsToToken,
         fee: Fee | None = None,  # All fee types
-        min_liquidity: Decimal = Decimal(1),  # 1 token
     ) -> Iterator["Pool"]:
         # TODO: Why does `ape_tokens` converter not return a checksummed address sometimes?
         converted_tokens = map(to_checksum_address, map(get_token_address, tokens))
@@ -120,12 +119,11 @@ class Factory(BaseIndex):
     def index(
         self,
         tokens: Iterable[ConvertsToToken] | None = None,
-        min_liquidity: Decimal = Decimal(1),  # 1 token
     ):
         logger.info("Uniswap v3 - indexing")
         num_pools = 0
         if tokens is not None:
-            for pool in self.get_pools(*tokens, min_liquidity=min_liquidity):
+            for pool in self.get_pools(*tokens):
                 yield pool
                 num_pools += 1
 
@@ -144,12 +142,12 @@ class Factory(BaseIndex):
                 fee=log.fee,
                 tick_spacing=log.tickSpacing,
             )
-            if pool.liquidity[log.token0] > min_liquidity:
-                self._indexed_pools.add_edge(log.token0, log.token1, key=log.fee, pool=pool)
-                self._pool_by_address[pool.address] = pool
 
-                yield pool
-                num_pools += 1
+            self._indexed_pools.add_edge(log.token0, log.token1, key=log.fee, pool=pool)
+            self._pool_by_address[pool.address] = pool
+
+            yield pool
+            num_pools += 1
 
         logger.success(f"Uniswap v3 - indexed {num_pools} pools")
         self._last_cached_block = end_block
@@ -158,7 +156,6 @@ class Factory(BaseIndex):
         self,
         bot: "SilverbackBot",
         tokens: Iterable[TokenInstance | AddressType] | None = None,
-        min_liquidity: Decimal = Decimal(1),  # 1 token
     ):
         from silverback.types import TaskType
 

@@ -84,7 +84,6 @@ class Uniswap(ManagerAccessMixin):
     def index(
         self,
         tokens: Iterable[ConvertsToToken] | None = None,
-        min_liquidity: Decimal = Decimal(1),  # 1 token
     ) -> Iterator[BasePair]:
         """
         Index all all factory/singleton deployments for enabled versions of protocol.
@@ -99,17 +98,16 @@ class Uniswap(ManagerAccessMixin):
         """
 
         for indexer in self.indexers:
-            yield from indexer.index(tokens=tokens, min_liquidity=min_liquidity)
+            yield from indexer.index(tokens=tokens)
 
     def install(
         self,
         bot: "SilverbackBot",
         tokens: Iterable[ConvertsToToken] | None = None,
-        min_liquidity: Decimal = Decimal(1),  # 1 token
     ):
 
         for indexer in self.indexers:
-            indexer.install(bot, tokens=tokens, min_liquidity=min_liquidity)
+            indexer.install(bot, tokens=tokens)
 
     # cachetools.cached w/ ttl set to block-time?
     def price(
