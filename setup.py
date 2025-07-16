@@ -31,7 +31,7 @@ extras_require = {
         "silverback>=0.7.22",  # Need for linting as it is optional
     ],
     "mcp": [
-        "fastmcp>2.10,<3",  # Needed for `uni mcp` server
+        "fastmcp>=2.10,<3",  # Needed for `uni mcp` server
     ],
 }
 
