@@ -173,7 +173,9 @@ def mcp(ecosystem, network, filter_tokens, account):
         from ape.types import AddressType
 
         token = Token.at(convert(token, AddressType))
-        return token.balanceOf(account) * Decimal(f"1e-{token.decimals()}")  # type: ignore[attr-defined]
+        return token.balanceOf(account) * Decimal(  # type: ignore[attr-defined]
+            f"1e-{token.decimals()}"  # type: ignore[attr-defined]
+        )
 
     @server.tool()
     async def get_price(ctx: Context, base: str, quote: str) -> Decimal:
