@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from decimal import Decimal
 
 import click
@@ -131,3 +132,78 @@ def swap(
         receiver=receiver,
         sender=account,
     )
+
+
+@cli.command(cls=ConnectedProviderCommand)
+@network_option()
+@account_option()
+@intermediate_tokens()
+def mcp(ecosystem, network, filter_tokens, account):
+    """Start the Uniswap MCP Server"""
+
+    try:
+        from fastmcp import Context, FastMCP
+
+    except ImportError:
+        raise click.UsageError("Must install the `[mcp]` extra to use this command.")
+
+    @asynccontextmanager
+    async def lifespan(server):
+        uni = Uniswap()
+        list(uni.index(tokens=(filter_tokens or tokens)))
+        yield uni
+
+    server = FastMCP(
+        name=f"Uniswap Protocol on {ecosystem.name}:{network.name}",
+        lifespan=lifespan,
+        instructions=f"""
+        # Uniswap MCP Server
+
+        This server provides capabilities for pricing and swapping tokens
+        using the Uniswap protocol on {ecosystem.name}:{network.name}.
+        """,
+    )
+
+    @server.resource("/balance/{token}")
+    async def get_token_balance(token: str) -> Decimal:
+        """Get the token balance of the user's account."""
+
+        from ape import convert
+        from ape.types import AddressType
+
+        token = Token.at(convert(token, AddressType))
+        return token.balanceOf(account)  # type: ignore[attr-defined]
+
+    @server.tool()
+    async def get_price(ctx: Context, base: str, quote: str) -> Decimal:
+        """Get the current price of BASE in terms of QUOTE."""
+        uni = ctx.request_context.lifespan_context
+
+        return uni.price(base, quote)
+
+    @server.tool()
+    async def swap(
+        ctx: Context,
+        have: str,
+        want: str,
+        amount_in: Decimal | None = None,
+        max_amount_in: Decimal | None = None,
+        amount_out: Decimal | None = None,
+        min_amount_out: Decimal | None = None,
+        slippage: Decimal | None = None,
+    ) -> str:
+        """Swap HAVE for WANT using the configured swap options."""
+
+        uni = ctx.request_context.lifespan_context
+        receipt = uni.swap(
+            have=have,
+            want=want,
+            amount_in=amount_in,
+            amount_out=amount_out,
+            slippage=slippage,
+            sender=account,
+            confirmations_required=0,
+        )
+        return str(receipt.txn_hash)
+
+    server.run(transport="http")
