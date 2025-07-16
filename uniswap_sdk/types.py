@@ -3,7 +3,6 @@ from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Generic, Iterable, Iterator, TypeVar
 
-from ape.contracts import ContractInstance
 from ape.types import AddressType
 from ape.utils import ManagerAccessMixin, cached_property
 from ape_tokens import Token, TokenInstance
@@ -11,8 +10,10 @@ from eth_utils import is_checksum_address
 from pydantic import BaseModel, Field, model_validator
 
 if TYPE_CHECKING:
+    from ape.api import BaseAddress
     from silverback import SilverbackBot
 
+ConvertsToToken = TypeVar("ConvertsToToken", bound="BaseAddress | AddressType | str")
 PairType = TypeVar("PairType", bound="BasePair")
 Route = tuple[PairType, ...]
 
@@ -104,11 +105,11 @@ class ExactOutOrder(BaseOrder):
 Order = ExactInOrder | ExactOutOrder
 
 
-class BaseIndex(ABC, Generic[PairType]):
+class BaseIndex(ABC, ManagerAccessMixin, Generic[PairType]):
     @abstractmethod
     def index(
         self,
-        tokens: Iterable[TokenInstance | AddressType] | None = None,
+        tokens: Iterable[ConvertsToToken] | None = None,
         min_liquidity: Decimal = Decimal(1),  # 1 token
     ) -> Iterator[PairType]: ...
 
@@ -116,12 +117,12 @@ class BaseIndex(ABC, Generic[PairType]):
     def install(
         self,
         bot: "SilverbackBot",
-        tokens: Iterable[TokenInstance | AddressType] | None = None,
+        tokens: Iterable[ConvertsToToken] | None = None,
         min_liquidity: Decimal = Decimal(1),  # 1 token
     ): ...
 
     @abstractmethod
-    def __getitem__(self, token: TokenInstance | AddressType) -> list[PairType]: ...
+    def __getitem__(self, token: ConvertsToToken) -> list[PairType]: ...
 
     # TODO: others?
     # `.get(tokenA, tokenB) -> BasePair | None` (more generic form of `.get_pair`)
@@ -131,8 +132,8 @@ class BaseIndex(ABC, Generic[PairType]):
     @abstractmethod
     def find_routes(
         self,
-        start_token: TokenInstance | AddressType,
-        end_token: TokenInstance | AddressType,
+        start_token: ConvertsToToken,
+        end_token: ConvertsToToken,
         depth: int = 2,
     ) -> Iterator[Route]:
         """
@@ -159,7 +160,7 @@ class BaseLiquidity(ABC):
     """Object that represents a pair's reserves"""
 
     @abstractmethod
-    def __getitem__(self, token: TokenInstance | AddressType) -> Decimal:
+    def __getitem__(self, token: ConvertsToToken) -> Decimal:
         """
         Maxmimum amount of token that can be swapped via pair.
         At most, this should be similar to ``token.balanceOf(pair)``.
@@ -197,26 +198,28 @@ class Fee(int, Enum):
         return self.value / Decimal(10**6)
 
 
-class BasePair(ABC):
+class BasePair(ABC, ManagerAccessMixin):
     fee: Fee
 
     def __init__(
         self,
-        token0: TokenInstance | AddressType,
-        token1: TokenInstance | AddressType,
+        token0: ConvertsToToken,
+        token1: ConvertsToToken,
     ):
         # Cache if available
-        if isinstance(token0, ContractInstance):
+        if isinstance(token0, TokenInstance):
             # NOTE: Completely overrides value of `cached_property`
             self.token0 = token0
-        else:
-            self._token0_address = token0
 
-        if isinstance(token1, ContractInstance):
+        else:
+            self._token0_address = self.conversion_manager.convert(token0, AddressType)
+
+        if isinstance(token1, TokenInstance):
             # NOTE: Completely overrides value of `cached_property`
             self.token1 = token1
+
         else:
-            self._token1_address = token1
+            self._token1_address = self.conversion_manager.convert(token1, AddressType)
 
     def describe(self) -> str:
         return (
@@ -251,34 +254,34 @@ class BasePair(ABC):
     @abstractmethod
     def __repr__(self) -> str: ...
 
-    def is_token0(self, token: ContractInstance | str) -> bool:
+    def is_token0(self, token: ConvertsToToken) -> bool:
         if isinstance(token, str) and not is_checksum_address(token):
             return self.token0.symbol() == token
-        else:
-            return self.token0 == token
 
-    def is_token1(self, token: ContractInstance | str) -> bool:
+        return self.token0.address == self.conversion_manager.convert(token, AddressType)
+
+    def is_token1(self, token: ConvertsToToken) -> bool:
         if isinstance(token, str) and not is_checksum_address(token):
             return self.token1.symbol() == token
-        else:
-            return self.token1 == token
 
-    def __contains__(self, token: ContractInstance | str) -> bool:
+        return self.token1.address == self.conversion_manager.convert(token, AddressType)
+
+    def __contains__(self, token: ConvertsToToken) -> bool:
         return self.is_token0(token) or self.is_token1(token)
 
-    def other(self, token: ContractInstance | str) -> TokenInstance:
+    def other(self, token: ConvertsToToken) -> TokenInstance:
         if self.is_token0(token):
             return self.token1
 
         elif self.is_token1(token):
             return self.token0
 
-        raise ValueError(f"Token {token} is not one of the tokens in pool")
+        raise ValueError(f"Token {token} is not in {self}")
 
     @abstractmethod
     def price(
         self,
-        token: ContractInstance | str,
+        token: ConvertsToToken,
         block_id: int | str = "latest",
     ) -> Decimal:
         """
@@ -294,14 +297,14 @@ class BasePair(ABC):
         """
 
     @abstractmethod
-    def depth(self, token: ContractInstance | str, price_change: Decimal) -> Decimal:
+    def depth(self, token: ConvertsToToken, price_change: Decimal) -> Decimal:
         """
         Maximum amount of `token` that can be swapped that keeps ``.price(token)`` below
         ``price_change`` (a ratio between 0 and 1, e.g. 5% is 0.05). Required for solving.
         """
 
     @abstractmethod
-    def reflexivity(self, token: ContractInstance | str, size: Decimal) -> Decimal:
+    def reflexivity(self, token: ConvertsToToken, size: Decimal) -> Decimal:
         """
         The relative change in ``.price(token)`` after swapping ``size`` of ``token`` to
         ``.other(token)``. Is unitless. Required for solving.

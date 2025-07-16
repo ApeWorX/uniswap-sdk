@@ -13,7 +13,7 @@ from . import v2, v3
 from .permit2 import Permit2, PermitDetails
 from .solver import Solution, SolverType, convert_solution_to_plan
 from .solver import solve as default_solver
-from .types import BaseIndex, BasePair, ExactInOrder, ExactOutOrder, Order, Route
+from .types import BaseIndex, BasePair, ConvertsToToken, ExactInOrder, ExactOutOrder, Order, Route
 from .utils import get_liquidity, get_price
 
 if TYPE_CHECKING:
@@ -83,7 +83,7 @@ class Uniswap(ManagerAccessMixin):
 
     def index(
         self,
-        tokens: Iterable[TokenInstance | AddressType] | None = None,
+        tokens: Iterable[ConvertsToToken] | None = None,
         min_liquidity: Decimal = Decimal(1),  # 1 token
     ) -> Iterator[BasePair]:
         """
@@ -104,7 +104,7 @@ class Uniswap(ManagerAccessMixin):
     def install(
         self,
         bot: "SilverbackBot",
-        tokens: Iterable[TokenInstance | AddressType] | None = None,
+        tokens: Iterable[ConvertsToToken] | None = None,
         min_liquidity: Decimal = Decimal(1),  # 1 token
     ):
 
@@ -114,8 +114,8 @@ class Uniswap(ManagerAccessMixin):
     # cachetools.cached w/ ttl set to block-time?
     def price(
         self,
-        base: TokenInstance | AddressType,
-        quote: TokenInstance | AddressType,
+        base: ConvertsToToken,
+        quote: ConvertsToToken,
         min_liquidity: Decimal = Decimal(1),  # 1 token
     ) -> Decimal:
         """
@@ -138,10 +138,10 @@ class Uniswap(ManagerAccessMixin):
             (Decimal): The requested price
         """
         if not isinstance(quote, TokenInstance):
-            quote = Token.at(quote)
+            quote = Token.at(self.conversion_manager.convert(quote, AddressType))
 
         if not isinstance(base, TokenInstance):
-            base = Token.at(base)
+            base = Token.at(self.conversion_manager.convert(base, AddressType))
 
         price_quotient = Decimal(0)
         total_liquidity = Decimal(0)
@@ -159,8 +159,8 @@ class Uniswap(ManagerAccessMixin):
 
     def find_routes(
         self,
-        have: TokenInstance | AddressType,
-        want: TokenInstance | AddressType,
+        have: ConvertsToToken,
+        want: ConvertsToToken,
     ) -> Iterator[Route]:
         for indexer in self.indexers:
             for route in indexer.find_routes(have, want):
@@ -168,8 +168,8 @@ class Uniswap(ManagerAccessMixin):
 
     def create_order(
         self,
-        have: TokenInstance | AddressType,
-        want: TokenInstance | AddressType,
+        have: ConvertsToToken,
+        want: ConvertsToToken,
         amount_in: Decimal | str | int | None = None,
         amount_out: Decimal | str | int | None = None,
         max_amount_in: Decimal | str | int | None = None,
@@ -187,9 +187,11 @@ class Uniswap(ManagerAccessMixin):
 
         if not isinstance(have, TokenInstance):
             have = Token.at(self.conversion_manager.convert(have, AddressType))
+        assert isinstance(have, TokenInstance)  # mypy happy
 
         if not isinstance(want, TokenInstance):
             want = Token.at(self.conversion_manager.convert(want, AddressType))
+        assert isinstance(want, TokenInstance)  # mypy happy
 
         if amount_in and not isinstance(amount_in, Decimal):
             amount_in = Decimal(self.conversion_manager.convert(amount_in, int)) / Decimal(
@@ -302,12 +304,13 @@ class Uniswap(ManagerAccessMixin):
 
     def approve_permit2(
         self,
-        token: TokenInstance | AddressType,
+        token: ConvertsToToken,
         allowance: Decimal | int | str = 2**256 - 1,
         **txn_kwargs,
     ) -> "ReceiptAPI":
         if not isinstance(token, TokenInstance):
             token = Token.at(self.conversion_manager.convert(token, AddressType))
+        assert isinstance(token, TokenInstance)  # mypy happy
 
         if isinstance(allowance, Decimal):
             allowance = (
@@ -336,7 +339,7 @@ class Uniswap(ManagerAccessMixin):
 
         have = order.have_token if order else order_and_txn_kwargs.get("have", order_kwargs["have"])
         if not isinstance(have, TokenInstance):
-            have = Token.at(have)
+            have = Token.at(self.conversion_manager.convert(have, AddressType))
 
         from ape.api import AccountAPI
 

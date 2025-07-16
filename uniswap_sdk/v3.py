@@ -1,19 +1,20 @@
+import itertools
 from decimal import Decimal
-from itertools import combinations
 from typing import TYPE_CHECKING, Iterable, Iterator, cast
 
 import networkx as nx  # type: ignore[import-untyped]
 from ape.contracts import ContractInstance
 from ape.logging import logger
 from ape.types import AddressType
-from ape.utils import ZERO_ADDRESS, ManagerAccessMixin, cached_property
+from ape.utils import ZERO_ADDRESS, cached_property
 from ape_ethereum import multicall
-from ape_tokens import Token, TokenInstance
+from ape_tokens import TokenInstance
 from eth_utils import to_int
+from eth_utils.address import to_checksum_address
 from pydantic import BaseModel, Field
 
 from .packages import V3, get_contract_instance
-from .types import BaseIndex, BaseLiquidity, BasePair, Fee, Route
+from .types import BaseIndex, BaseLiquidity, BasePair, ConvertsToToken, Fee, Route
 from .utils import get_token_address, sort_tokens
 
 if TYPE_CHECKING:
@@ -26,7 +27,7 @@ MIN_TICK = -887272  # price of 2.939e-39
 MAX_TICK = 887272  # price of 3.403e38
 
 
-class Factory(ManagerAccessMixin, BaseIndex):
+class Factory(BaseIndex):
     def __init__(self) -> None:
         self._pool_by_address: dict[AddressType, "Pool"] = {}
         # NOTE: V3 allows multiple pools by fee
@@ -42,81 +43,75 @@ class Factory(ManagerAccessMixin, BaseIndex):
 
     def get_pool(
         self,
-        tokenA: TokenInstance | AddressType,
-        tokenB: TokenInstance | AddressType,
+        tokenA: ConvertsToToken,
+        tokenB: ConvertsToToken,
         fee: Fee = Fee.MEDIUM,
     ) -> "Pool | None":
         # NOTE: First make sure this is a supported fee type
         fee = Fee(fee)
-        token0, token1 = sort_tokens((tokenA, tokenB))
-        u, v = get_token_address(tokenA), get_token_address(tokenB)
+
+        token0: AddressType
+        token1: AddressType
+        token0, token1 = sort_tokens(
+            (
+                self.conversion_manager.convert(tokenA, AddressType),
+                self.conversion_manager.convert(tokenB, AddressType),
+            )
+        )
 
         try:
-            return self._indexed_pools[u][v][fee.value]["pool"]
+            return self._indexed_pools[token0][token1][fee.value]["pool"]
         except KeyError:
             pass  # NOTE: Not indexed, go find it
 
         if (pool_address := self.contract.getPool(token0, token1, fee)) == ZERO_ADDRESS:
-            return None
+            return None  # Doesn't exist
 
         pool = Pool(address=pool_address, token0=token0, token1=token1, fee=fee)
-        self._indexed_pools.add_edge(u, v, key=fee.value, pool=pool)
+        self._indexed_pools.add_edge(token0, token1, key=fee.value, pool=pool)
         self._pool_by_address[pool.address] = pool
         return pool
 
     def get_pools(
         self,
-        *tokens: TokenInstance | AddressType,
+        *tokens: ConvertsToToken,
         fee: Fee | None = None,  # All fee types
         min_liquidity: Decimal = Decimal(1),  # 1 token
     ) -> Iterator["Pool"]:
-        pool_args: list[dict] = []
-        call = multicall.Call()
+        # TODO: Why does `ape_tokens` converter not return a checksummed address sometimes?
+        converted_tokens = map(to_checksum_address, map(get_token_address, tokens))
+        sorted_token_pairs = list(map(sort_tokens, itertools.combinations(converted_tokens, 2)))
 
-        for fee in (Fee(fee),) if fee else iter(Fee):
-            for tokenA, tokenB in combinations(map(get_token_address, tokens), 2):
-                # Add to batch
+        fees_to_index: tuple[Fee, ...]
+        if fee is not None:
+            fees_to_index = (Fee(fee),)
+        else:
+            fees_to_index = tuple(v for v in Fee if v is not Fee.MAXIMUM)
+
+        pool_args: list[tuple[AddressType, AddressType, Fee]] = []
+        calls = [multicall.Call()]
+        for pool_fee in fees_to_index:
+            for token0, token1 in sorted_token_pairs:
                 # NOTE: we need to order them since `token0` and `token1` is based on ordering
                 try:
-                    yield self._indexed_pools[tokenA][tokenB][fee.value]["pool"]
-                    continue  # Skip multicall fetch
+                    yield self._indexed_pools[token0][token1][pool_fee.value]["pool"]
 
                 except KeyError:
-                    pass
+                    # Add to batch
+                    pool_args.append((token0, token1, pool_fee))
+                    calls[-1].add(self.contract.getPool, token0, token1, pool_fee.value)
 
-                token0, token1 = sort_tokens((tokenA, tokenB))
-                pool_args.append(dict(token0=token0, token1=token1, fee=fee))
-                call.add(self.contract.getPool, tokenA, tokenB, fee)
+                    if len(calls[-1].calls) >= 5_000:
+                        calls.append(multicall.Call())
 
-                # If batch is full, execute it
-                if len(call.calls) > 5_000:
-                    for pool_address, kwargs in zip(call(), pool_args):
-                        if pool_address != ZERO_ADDRESS:
-                            pool = Pool(pool_address, **kwargs)
-                            self._indexed_pools.add_edge(
-                                kwargs["token0"],
-                                kwargs["token1"],
-                                key=kwargs["fee"].value,
-                                pool=pool,
-                            )
-                            self._pool_by_address[pool.address] = pool
-                            yield pool
-
-                    # Reset batching variables
-                    pool_args = []
-                    call = multicall.Call()
-
-        # Do the remaining batch here
-        for pool_address, kwargs in zip(call(), pool_args):
+        pool_addresses = itertools.chain(call() for call in calls)
+        for pool_address, (token0, token1, fee) in zip(*pool_addresses, pool_args):
             if pool_address != ZERO_ADDRESS:
-                pool = Pool(pool_address, **kwargs)
-                if pool.liquidity[kwargs["token0"]] < min_liquidity:
-                    continue
-
+                pool = Pool(pool_address, token0=token0, token1=token1, fee=fee)
                 self._indexed_pools.add_edge(
-                    kwargs["token0"],
-                    kwargs["token1"],
-                    key=kwargs["fee"].value,
+                    token0,
+                    token1,
+                    key=fee.value,
                     pool=pool,
                 )
                 self._pool_by_address[pool.address] = pool
@@ -124,19 +119,20 @@ class Factory(ManagerAccessMixin, BaseIndex):
 
     def index(
         self,
-        tokens: Iterable[TokenInstance | AddressType] | None = None,
+        tokens: Iterable[ConvertsToToken] | None = None,
         min_liquidity: Decimal = Decimal(1),  # 1 token
     ):
         logger.info("Uniswap v3 - indexing")
         num_pools = 0
-        if tokens:
+        if tokens is not None:
             for pool in self.get_pools(*tokens, min_liquidity=min_liquidity):
                 yield pool
                 num_pools += 1
-            logger.success(f"Uniswap v3 - indexed {num_pools} pairs")
+
+            logger.success(f"Uniswap v3 - indexed {num_pools} pools")
             return  # NOTE: Shortcut for indexing less
 
-        # NOTE: Uniswap v3 doesn't have a shortcut to iter all pools
+        # NOTE: Uniswap v3 doesn't have a shortcut to iter all pools like v2
         for log in self.contract.PoolCreated.range(
             self._last_cached_block,
             end_block := self.chain_manager.blocks.head.number,
@@ -155,7 +151,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
                 yield pool
                 num_pools += 1
 
-        logger.success(f"Uniswap v3 - indexed {num_pools} pairs")
+        logger.success(f"Uniswap v3 - indexed {num_pools} pools")
         self._last_cached_block = end_block
 
     def install(
@@ -184,6 +180,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
                     tick_spacing=log.tickSpacing,
                 )
                 pool.liquidity = _ManagedLiquidity(pool)
+
                 self._indexed_pools.add_edge(log.token0, log.token1, key=log.fee, pool=pool)
                 self._pool_by_address[pool.address] = pool
 
@@ -207,23 +204,24 @@ class Factory(ManagerAccessMixin, BaseIndex):
             sync_pool_liquidity
         )
 
-    def get_pools_by_token(self, token: TokenInstance | AddressType) -> Iterator["Pool"]:
+    def get_pools_by_token(self, token: ConvertsToToken) -> Iterator["Pool"]:
         # Yield all from index
-        for data in self._indexed_pools[
-            token.address if isinstance(token, Token) else token
+        for edge_data in self._indexed_pools[
+            self.conversion_manager.convert(token, AddressType)
         ].values():
-            yield cast(Pool, data["pool"])
+            yield cast(Pool, edge_data["pool"])
 
-    def __getitem__(self, token: TokenInstance | AddressType) -> list[BasePair]:
+    def __getitem__(self, token: ConvertsToToken) -> list["Pool"]:
         return list(self.get_pools_by_token(token))
 
     def find_routes(
         self,
-        start_token: TokenInstance | AddressType,
-        end_token: TokenInstance | AddressType,
+        start_token: ConvertsToToken,
+        end_token: ConvertsToToken,
         depth: int = 2,
     ) -> Iterator[Route["Pool"]]:
-        start, end = get_token_address(start_token), get_token_address(end_token)
+        start = self.conversion_manager.convert(start_token, AddressType)
+        end = self.conversion_manager.convert(end_token, AddressType)
 
         try:
             for edge_paths in nx.all_simple_edge_paths(
@@ -246,17 +244,20 @@ class Factory(ManagerAccessMixin, BaseIndex):
         return tuple(encoded_path)
 
 
-class Pool(ManagerAccessMixin, BasePair):
+class Pool(BasePair):
     def __init__(
         self,
         address: AddressType,
-        token0: TokenInstance | AddressType | None = None,
-        token1: TokenInstance | AddressType | None = None,
+        token0: ConvertsToToken | None = None,
+        token1: ConvertsToToken | None = None,
         fee: Fee | int = Fee.MEDIUM,
         tick_spacing: int | None = None,
     ):
         self.address = address
-        super().__init__(token0=token0, token1=token1)
+        super().__init__(
+            token0=token0 or self.contract.token0(),
+            token1=token1 or self.contract.token1(),
+        )
 
         self.fee = Fee(fee)
         self.tick_spacing = tick_spacing or self.fee.tick_spacing
@@ -279,14 +280,6 @@ class Pool(ManagerAccessMixin, BasePair):
         # TODO: Make ContractInstance.at cache?
         #       Dunno what causes all the `eth_chainId` requests over and over
         return V3.UniswapV3Pool.at(self.address)
-
-    @cached_property
-    def token0(self) -> TokenInstance:
-        return Token.at(self._token0_address or self.contract.token0())
-
-    @cached_property
-    def token1(self) -> TokenInstance:
-        return Token.at(self._token1_address or self.contract.token1())
 
     def prev_tick(self, tick: int) -> int:
         compressed = (tick // self.tick_spacing) + 1
@@ -325,7 +318,7 @@ class Pool(ManagerAccessMixin, BasePair):
         Price of ``token`` relative to the other token in the pair.
         """
         slot0_at_block = self.contract.slot0(block_id=block_id)
-        token0_price = (Decimal(slot0_at_block.sqrtPriceX96)) ** 2 / 2**192
+        token0_price = Decimal(slot0_at_block.sqrtPriceX96) ** 2 / 2**192
 
         conversion = 10 ** Decimal(self.token1.decimals() - self.token0.decimals())
         if self.is_token0(token):
@@ -385,6 +378,7 @@ class Liquidity(BaseLiquidity):
         return TickReserves(**self.pool.contract.ticks(tick).__dict__)
 
     def __getitem__(self, token: ContractInstance | str) -> Decimal:
+        # TODO: This formula is not correct for v3 concentrated liquidity
         if self.pool.is_token0(token):
             return Decimal(self.pool.token0.balanceOf(self.pool.address)) / 10 ** Decimal(
                 self.pool.token0.decimals()
@@ -410,6 +404,7 @@ class _ManagedLiquidity(Liquidity):
         return self.pool.current_slot0.tick
 
     def __getitem__(self, token: ContractInstance | str) -> Decimal:
+        # TODO: This formula is not correct for v3 concentrated liquidity
         if self.pool.is_token0(token):
             return Decimal(self.reserve0) / 10 ** Decimal(self.pool.token1.decimals())
 

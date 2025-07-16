@@ -6,20 +6,22 @@ import networkx as nx  # type: ignore[import-untyped]
 from ape.contracts import ContractInstance
 from ape.logging import logger
 from ape.types import AddressType
-from ape.utils import ZERO_ADDRESS, ManagerAccessMixin, cached_property
+from ape.utils import ZERO_ADDRESS, cached_property
 from ape_ethereum import multicall
 from ape_tokens import Token, TokenInstance
 from eth_utils import to_int
+from eth_utils.address import to_checksum_address
+
+from uniswap_sdk.utils import get_token_address, sort_tokens
 
 from .packages import V2, get_contract_instance
-from .types import BaseIndex, BasePair, Fee, Route
-from .utils import get_token_address, sort_tokens
+from .types import BaseIndex, BasePair, ConvertsToToken, Fee, Route
 
 if TYPE_CHECKING:
     from silverback import SilverbackBot
 
 
-class Factory(ManagerAccessMixin, BaseIndex):
+class Factory(BaseIndex):
     """
     Singleton class to interact with a deployment of the Uniswap V2 protocol's Factory contract.
 
@@ -63,60 +65,60 @@ class Factory(ManagerAccessMixin, BaseIndex):
 
     def get_pair(
         self,
-        tokenA: TokenInstance | AddressType,
-        tokenB: TokenInstance | AddressType,
+        tokenA: ConvertsToToken,
+        tokenB: ConvertsToToken,
     ) -> "Pair | None":
-        if isinstance(tokenA, TokenInstance):
-            tokenA = tokenA.address
-        if isinstance(tokenB, TokenInstance):
-            tokenB = tokenB.address
+        token0, token1 = sort_tokens(
+            (
+                self.conversion_manager.convert(tokenA, AddressType),
+                self.conversion_manager.convert(tokenB, AddressType),
+            )
+        )
 
         try:
-            return self._indexed_pairs[tokenA][tokenB]["pair"]
+            return self._indexed_pairs[token0][token1]["pair"]
         except KeyError:
             pass  # NOTE: Not indexed, go find it
 
-        if (pair_address := self.contract.getPair(tokenA, tokenB)) == ZERO_ADDRESS:
+        if (pair_address := self.contract.getPair(token0, token1)) == ZERO_ADDRESS:
             return None
 
-        if get_token_address(tokenA) < get_token_address(tokenB):
-            return Pair(address=pair_address, token0=tokenA, token1=tokenB)
-        else:
-            return Pair(address=pair_address, token0=tokenB, token1=tokenA)
+        return Pair(address=pair_address, token0=token0, token1=token1)
 
     def get_pairs(
         self,
-        *tokens: TokenInstance | AddressType,
+        *tokens: ConvertsToToken,
         min_liquidity: Decimal = Decimal(1),  # 1 token
     ) -> Iterator["Pair"]:
         if len(tokens) < 2:
             raise ValueError("Must give at least two tokens to search for pairs")
 
-        ordered_token_pairs, token_pairs = itertools.tee(itertools.combinations(tokens, 2))
-
-        ordered_token_pairs = map(sort_tokens, ordered_token_pairs)
+        # TODO: Why does `ape_tokens` converter not return a checksummed address sometimes?
+        converted_tokens = map(to_checksum_address, map(get_token_address, tokens))
+        sorted_token_pairs = map(sort_tokens, itertools.combinations(converted_tokens, 2))
 
         calls = [multicall.Call()]
-        for tokenA, tokenB in token_pairs:
-            addr_a = get_token_address(tokenA)
-            addr_b = get_token_address(tokenB)
+        token_pairs: list[tuple[AddressType, AddressType]] = []
+        for token0, token1 in sorted_token_pairs:
             try:
-                yield self._indexed_pairs[addr_a][addr_b]["pair"]
+                yield self._indexed_pairs[token0][token1]["pair"]
+
             except KeyError:
                 # NOTE: Not indexed, go find it via multicall instead
-                calls[-1].add(self.contract.getPair, tokenA, tokenB)
+                token_pairs.append((token0, token1))
+                calls[-1].add(self.contract.getPair, token0, token1)
 
-            if len(calls[-1].calls) >= 10_000:
-                calls.append(multicall.Call())
+                if len(calls[-1].calls) >= 10_000:
+                    calls.append(multicall.Call())
 
         pair_addresses = itertools.chain(call() for call in calls)
-        for pair_address, (token0, token1) in zip(*pair_addresses, ordered_token_pairs):
+        for pair_address, (token0, token1) in zip(*pair_addresses, token_pairs):
             if pair_address != ZERO_ADDRESS:
                 pair = Pair(address=pair_address, token0=token0, token1=token1)
                 if pair.liquidity[token0] < min_liquidity:
                     continue
 
-                self._indexed_pairs.add_edge(pair.token0.address, pair.token1.address, pair=pair)
+                self._indexed_pairs.add_edge(token0, token1, pair=pair)
                 self._pair_by_address[pair.address] = pair
                 yield pair
 
@@ -125,7 +127,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
 
     def index(
         self,
-        tokens: Iterable[TokenInstance | AddressType] | None = None,
+        tokens: Iterable[ConvertsToToken] | None = None,
         min_liquidity: Decimal = Decimal(1),  # 1 token
     ) -> Iterator["Pair"]:
         logger.info("Uniswap v2 - indexing")
@@ -137,29 +139,25 @@ class Factory(ManagerAccessMixin, BaseIndex):
             logger.success(f"Uniswap v2 - indexed {num_pairs} pairs")
             return  # NOTE: Shortcut for indexing less
 
-        # TODO: Reformat to query system when better (using PairCreated)
-        #       and move this to a query engine?
+        # TODO: Reformat to use query system when better (using PairCreated)
+        #       and potentially move this to a query engine implementation
         pair_calls = [multicall.Call()]
         for idx in range(self._last_indexed, num_pairs := self.__len__()):
             pair_calls[-1].add(self.contract.allPairs, idx)
             if len(pair_calls[-1].calls) >= 10_000:
                 pair_calls.append(multicall.Call())
 
-        nonzero_pairs, pair_addresses = itertools.tee(
-            filter(
-                lambda a: a != ZERO_ADDRESS,
-                itertools.chain(call() for call in pair_calls),
-            )
-        )
-
+        pair_addresses = []
         token_calls = [multicall.Call()]
-        for pair_address in nonzero_pairs:
+        for pair_address in itertools.chain(call() for call in pair_calls):
+            pair_addresses.append(pair_address)
+
             token_calls[-1].calls.append(
                 dict(
                     target=pair_address,
                     value=0,
                     allowFailure=False,
-                    callData=bytes.fromhex("0dfe1681"),
+                    callData=bytes.fromhex("0dfe1681"),  # methodID for `token0()`
                 )
             )
             token_calls[-1].abis.append(V2.UniswapV2Pair.contract_type.view_methods["token0"])
@@ -169,7 +167,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
                     target=pair_address,
                     value=0,
                     allowFailure=False,
-                    callData=bytes.fromhex("d21220a7"),
+                    callData=bytes.fromhex("d21220a7"),  # methodID for `token1()`
                 )
             )
             token_calls[-1].abis.append(V2.UniswapV2Pair.contract_type.view_methods["token1"])
@@ -178,14 +176,14 @@ class Factory(ManagerAccessMixin, BaseIndex):
                 token_calls.append(multicall.Call())
 
         def yield_pairs(itr):
-            # TODO: Is there a built-in solution?
+            # TODO: `itertools.batched` added in 3.12, backport?
             try:
                 yield next(itr), next(itr)
             except StopIteration:
                 pass
 
         for pair_address, (token0, token1) in zip(
-            *pair_addresses,
+            pair_addresses,
             yield_pairs(itertools.chain(call() for call in token_calls)),
         ):
             pair = Pair(address=pair_address, token0=token0, token1=token1)
@@ -201,7 +199,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
     def install(
         self,
         bot: "SilverbackBot",
-        tokens: Iterable[TokenInstance | AddressType] | None = None,
+        tokens: Iterable[ConvertsToToken] | None = None,
         min_liquidity: Decimal = Decimal(1),  # 1 token
     ):
         from silverback.types import TaskType
@@ -221,7 +219,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
                     pair.liquidity = _ManagedLiquidity(pair)
                     self._indexed_pairs.add_edge(log.token0, log.token1, pair=pair)
 
-        # NOTE: Modify name to namespace it from user tasks
+        # NOTE: Modify name to namespace if from user tasks
         index_new_pair.__name__ = f"uniswap:v2:{index_new_pair.__name__}"
         bot.broker_task_decorator(TaskType.EVENT_LOG, container=self.contract.PairCreated)(
             index_new_pair
@@ -229,12 +227,12 @@ class Factory(ManagerAccessMixin, BaseIndex):
 
         async def sync_pair_liquidity(log):
             if pair := self._pair_by_address.get(log.contract_address):
-                assert isinstance(pair.liquidity, _ManagedLiquidity)
+                assert isinstance(pair.liquidity, _ManagedLiquidity)  # mypy happy
                 pair.liquidity.reserve0 = log.reserve0
                 pair.liquidity.reserve1 = log.reserve1
                 pair.liquidity.last_updated = log.block.timestamp
 
-        # NOTE: Modify name to namespace it from user tasks
+        # NOTE: Modify name to namespace if from user tasks
         sync_pair_liquidity.__name__ = f"uniswap:v2:{sync_pair_liquidity.__name__}"
         bot.broker_task_decorator(TaskType.EVENT_LOG, container=V2.UniswapV2Pair.Sync)(
             sync_pair_liquidity
@@ -244,28 +242,24 @@ class Factory(ManagerAccessMixin, BaseIndex):
         # Yield pairs from all edges in index
         yield from self._pair_by_address.values()
 
-    def get_pairs_by_token(self, token: TokenInstance | AddressType) -> Iterator["Pair"]:
-        if isinstance(token, TokenInstance):
-            token = token.address
+    def get_pairs_by_token(self, token: ConvertsToToken) -> Iterator["Pair"]:
+        token = self.conversion_manager.convert(token, AddressType)
 
         # Yield pair from edges that have token as node in index
         for edge in self._indexed_pairs[token].values():
             yield edge["pair"]
 
-    def __getitem__(self, token: TokenInstance | AddressType) -> list[BasePair]:
+    def __getitem__(self, token: ConvertsToToken) -> list["Pair"]:
         return list(self.get_pairs_by_token(token))
 
     def find_routes(
         self,
-        start_token: TokenInstance | AddressType,
-        end_token: TokenInstance | AddressType,
+        start_token: ConvertsToToken,
+        end_token: ConvertsToToken,
         depth: int = 2,
     ) -> Iterator[Route["Pair"]]:
-        if isinstance(start_token, TokenInstance):
-            start_token = start_token.address
-
-        if isinstance(end_token, TokenInstance):
-            end_token = end_token.address
+        start_token = self.conversion_manager.convert(start_token, AddressType)
+        end_token = self.conversion_manager.convert(end_token, AddressType)
 
         try:
             for edge_paths in nx.all_simple_edge_paths(
@@ -287,7 +281,7 @@ class Factory(ManagerAccessMixin, BaseIndex):
         return tuple(encoded_path)
 
 
-class Pair(ManagerAccessMixin, BasePair):
+class Pair(BasePair):
     """
     Represents a UniswapV2Pair contract, which implements swaps between two tokens
     according to the x*y=k constant product market maker function
@@ -349,7 +343,7 @@ class Pair(ManagerAccessMixin, BasePair):
         # Default is live RPC query
         return Liquidity(pair=self)
 
-    def price(self, token: ContractInstance | str, block_id: int | str = "latest") -> Decimal:
+    def price(self, token: ConvertsToToken, block_id: int | str = "latest") -> Decimal:
         token0_reserve, token1_reserve, _ = self.liquidity.get_reserves(block_id=block_id)
         token0_balance = Decimal(token0_reserve) / Decimal(10 ** self.token0.decimals())
         token1_balance = Decimal(token1_reserve) / Decimal(10 ** self.token1.decimals())
@@ -366,7 +360,7 @@ class Pair(ManagerAccessMixin, BasePair):
         else:
             raise ValueError(f"Token {token} not in pair")
 
-    def depth(self, token: ContractInstance | str, slippage: Decimal | float) -> Decimal:
+    def depth(self, token: ConvertsToToken, slippage: Decimal | float | str) -> Decimal:
         if not isinstance(slippage, Decimal):
             slippage = Decimal(slippage)
 
@@ -378,9 +372,9 @@ class Pair(ManagerAccessMixin, BasePair):
             (1 / (1 - slippage).sqrt()) - 1
         )
 
-    def reflexivity(self, token: ContractInstance | str, size: Decimal | int) -> Decimal:
+    def reflexivity(self, token: ConvertsToToken, size: Decimal | int | str) -> Decimal:
         if not isinstance(size, Decimal):
-            size = Decimal(size) / 10 ** Decimal(
+            size = Decimal(self.conversion_manager.convert(size, int)) / 10 ** Decimal(
                 self.token0.decimals() if self.is_token0(token) else self.token1.decimals()
             )
 
@@ -403,7 +397,7 @@ class Liquidity:
             block_id += self._pair.chain_manager.blocks.head.number
         return self._pair.contract.getReserves(block_id=block_id)
 
-    def __getitem__(self, token: TokenInstance | str) -> Decimal:
+    def __getitem__(self, token: ConvertsToToken) -> Decimal:
         if self._pair.is_token0(token):
             return Decimal(self.get_reserves()[0]) / Decimal(10 ** self._pair.token0.decimals())
 
@@ -411,11 +405,11 @@ class Liquidity:
             return Decimal(self.get_reserves()[1]) / Decimal(10 ** self._pair.token1.decimals())
 
         else:
-            raise ValueError(f"Token {token} not in pair")
+            raise ValueError(f"Token {token} not in pair {self._pair.address}")
 
 
 class _ManagedLiquidity(Liquidity):
-    """Dynamically fetch liquidity information for v2.Pair via RPC"""
+    """Cached liquidity information for v2.Pair via Silverback live-indexing"""
 
     def __init__(self, pair: Pair):
         self._pair = pair
