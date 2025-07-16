@@ -1,8 +1,79 @@
 [build-system]
 requires = ["setuptools>=75.6.0", "wheel", "setuptools_scm[toml]>=5.0"]
 
+[project]
+name = "uniswap-sdk"
+license = "Apache-2.0"
+description = "Ape SDK for Uniswap protocol contracts"
+keywords = ["ethereum", "uniswap", "ape framework", "crypto", "trading"]
+readme = "README.md"
+dynamic = ["version"]
+authors = [
+    { name = "ApeWorX Ltd.", email = "admin@apeworx.io"},
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "eth-ape>=0.8.33,<1",
+    # Graph library for solving (Requires Python 3.10+)
+    "networkx>=3.4.2,<4",
+    # Required plugin for working with tokens
+    "ape-tokens>=0.8.5,<1",
+]
+
+[project.scripts]
+uni = "uniswap_sdk._cli:cli"
+
+[project.urls]
+Repository = "https://github.com/ApeWorX/uniswap-sdk"
+
+[project.optional-dependencies]
+bot = [
+    "silverback>=0.7.22",  # Need for linting as it is optional
+]
+lint = [
+    "black",  # auto-formatter and linter
+    "mypy",  # Static type analyzer
+    "flake8",  # Style linter
+    "isort",  # Import sorting linter
+    "uniswap-sdk[bot]",
+]
+test = [  # `test` GitHub Action jobs uses this
+    "pytest",  # Core testing package
+    "pytest-xdist",  # multi-process runner
+    "pytest-cov",  # Coverage analyzer plugin
+    "hypothesis",  # Strategy-based fuzzer
+]
+release = [  # `release` GitHub Action job uses this
+    "setuptools>=75.6.0",  # Installation tool
+    "wheel",  # Packaging tool
+    "twine",  # Package upload tool
+]
+dev = [
+    "commitizen",  # Manage commits and publishing releases
+    "pre-commit",  # Ensure that linters are run prior to commiting
+    "pytest-watch",  # `ptw` test watcher/runner
+    "IPython",  # Console for interacting
+    "ipdb",  # Debugger (Must use `export PYTHONBREAKPOINT=ipdb.set_trace`)
+    "uniswap-sdk[test,lint,release,bot]",
+]
+
 [tool.mypy]
 exclude = "build/"
+
+[tool.setuptools]
+packages = ["uniswap_sdk"]
 
 [tool.setuptools_scm]
 write_to = "uniswap_sdk/version.py"
