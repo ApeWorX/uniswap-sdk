@@ -5,20 +5,26 @@ from typing import TYPE_CHECKING, Any, Callable
 from ape.types import AddressType
 from ape_tokens import TokenInstance
 from eth_utils import to_int
+from eth_utils.address import is_checksum_address
 
-from .types import BasePair, Fee, Route
+from .types import BasePair, ConvertsToToken, Fee, Route
 
 if TYPE_CHECKING:
     pass
 
 
-def get_token_address(token):
+def get_token_address(token: ConvertsToToken) -> AddressType:
+    if is_checksum_address(token):
+        return token
+
     from ape import convert
 
     return convert(token, AddressType)
 
 
-def sort_tokens(tokens):
+def sort_tokens(
+    tokens: tuple[ConvertsToToken, ConvertsToToken],
+) -> tuple[ConvertsToToken, ConvertsToToken]:
     a, b = tokens
     addr_a_int = to_int(hexstr=get_token_address(a))
     addr_b_int = to_int(hexstr=get_token_address(b))
