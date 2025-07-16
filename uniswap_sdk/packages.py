@@ -37,10 +37,7 @@ def get_contract_instance(ct: ContractContainer, chain_id: int) -> ContractInsta
     if not (address := addresses.get(chain_id, addresses.get(0))):
         raise ValueError(f"No known address for `{ct.__class__.__name__}` on chain ID: {chain_id}")
 
-    if not (contract := ct.at(address)).is_contract:
-        raise ValueError(f"{contract.address} is not a contract on chain ID: {chain_id}")
-
-    return contract
+    return ct.at(address)
 
 
 # NOTE: chain_id `0` is wildcard match
