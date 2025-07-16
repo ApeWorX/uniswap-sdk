@@ -30,6 +30,9 @@ extras_require = {
     "bot": [
         "silverback>=0.7.22",  # Need for linting as it is optional
     ],
+    "mcp": [
+        "fastmcp>2.10,<3",  # Needed for `uni mcp` server
+    ],
 }
 
 # NOTE: `pip install -e .[dev]` to install package
@@ -38,6 +41,7 @@ extras_require["dev"] = (
     + extras_require["lint"]
     + extras_require["release"]
     + extras_require["bot"]
+    + extras_require["mcp"]
     + extras_require["dev"]
 )
 
