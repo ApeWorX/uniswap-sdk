@@ -58,7 +58,7 @@ class Uniswap(ManagerAccessMixin):
         use_solver: SolverType | None = None,
     ):
         if default_slippage is not None:
-            self.DEFAULT_SLIPPAGE = Decimal(default_slippage)
+            self.DEFAULT_SLIPPAGE = Decimal(default_slippage).quantize(Decimal("1e-5"))
 
         self.permit2 = Permit2()
         self.router = ur.UniversalRouter()
