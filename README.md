@@ -50,6 +50,18 @@ Decimal("4.75")
 ... )
 ```
 
+To swap directly with Ether (native token, **NOT ERC20**):
+
+```py
+>>> uni.swap(want="UNI", sender=trader, value="1 ether")
+# OR
+>>> uni.swap(want="UNI", amount_out="10 UNI", sender=trader, value="1 ether")
+```
+
+If `have=` is not present but `value=` is, then `have=` will be set to WETH (if available on your network) for solving.
+If `amount_in=`, `max_amount_in=`, and `amount_out=` are not present (1st example), then `value=` will work like `amount_in=`.
+If `amount_out` is present (2nd example), then `value=` will act like setting `max_amount_in=`.
+
 ### CLI
 
 This SDK installs a special CLI command `uni`.
