@@ -224,7 +224,7 @@ class Uniswap(ManagerAccessMixin):
 
             else:  # NOTE: Compute slippage (for solver) based on provided inputs
                 slippage = (
-                    (price := self.price(have, want) - amount_out / max_amount_in) / price
+                    ((price := self.price(have, want)) - amount_out / max_amount_in) / price
                 ).quantize(Decimal("1e-5"))
 
             return ExactOutOrder(
@@ -242,7 +242,7 @@ class Uniswap(ManagerAccessMixin):
 
             else:  # NOTE: Compute slippage (for solver) based on provided inputs
                 slippage = (
-                    (price := self.price(have, want) - min_amount_out / amount_in) / price
+                    ((price := self.price(have, want)) - min_amount_out / amount_in) / price
                 ).quantize(Decimal("1e-5"))
 
             return ExactInOrder(
