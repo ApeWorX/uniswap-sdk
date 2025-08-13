@@ -155,7 +155,8 @@ def convert_solution_to_plan(
                     ur.Constants.ADDRESS_THIS if native_out else receiver,
                     int(amount_out_route * ONE_WANT_TOKEN),  # amountOut
                     int(amount_in_route * ONE_HAVE_TOKEN),  # amountInMax
-                    v3.Factory.encode_route(order.have_token, *route),
+                    # NOTE: For v3, exact out swap must be encoded in reverse order
+                    v3.Factory.encode_route(order.want_token, *reversed(route)),
                     payer_is_user,
                 )
 
