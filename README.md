@@ -56,11 +56,14 @@ To swap directly with Ether (native token, **NOT ERC20**):
 >>> uni.swap(want="UNI", sender=trader, value="1 ether")
 # OR
 >>> uni.swap(want="UNI", amount_out="10 UNI", sender=trader, value="1 ether")
+# OR
+>>> uni.swap(have="UNI", amount_in="10 UNI", native_out=True, ...)
 ```
 
 If `have=` is not present but `value=` is, then `have=` will be set to WETH (if available on your network) for solving.
 If `amount_in=`, `max_amount_in=`, and `amount_out=` are not present (1st example), then `value=` will work like `amount_in=`.
 If `amount_out` is present (2nd example), then `value=` will act like setting `max_amount_in=`.
+If `native_out=True` is present (3rd example), then the amount received will be native ether and not an ERC20.
 
 ### CLI
 
