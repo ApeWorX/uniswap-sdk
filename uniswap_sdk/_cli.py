@@ -20,7 +20,7 @@ def intermediate_tokens():
         metavar="TOKEN",
         multiple=True,
         default=[],
-        help="Tokens to index intermediate routes for.",
+        help="Tokens to index routes for.",
     )
 
 
@@ -201,15 +201,43 @@ def mcp(ecosystem, network, filter_tokens, account):
         """Swap HAVE for WANT using the configured swap options."""
 
         uni = ctx.request_context.lifespan_context
-        receipt = uni.swap(
-            have=have,
-            want=want,
-            amount_in=amount_in,
-            amount_out=amount_out,
-            slippage=slippage,
-            sender=account,
-            confirmations_required=0,
-        )
+        if have in ("ETH", "ether"):
+            receipt = uni.swap(
+                want=want,
+                amount_out=amount_out,
+                min_amount_out=min_amount_out,
+                slippage=slippage,
+                value=f"{amount_in or max_amount_in} ether",
+                sender=account,
+                confirmations_required=0,
+            )
+
+        elif want in ("ETH", "ether"):
+            receipt = uni.swap(
+                have=have,
+                amount_in=amount_in,
+                max_amount_in=max_amount_in,
+                amount_out=amount_out,
+                min_amount_out=min_amount_out,
+                slippage=slippage,
+                native_out=True,
+                sender=account,
+                confirmations_required=0,
+            )
+
+        else:  # ERC20 <> ERC20 swap
+            receipt = uni.swap(
+                have=have,
+                want=want,
+                amount_in=amount_in,
+                max_amount_in=max_amount_in,
+                amount_out=amount_out,
+                min_amount_out=min_amount_out,
+                slippage=slippage,
+                sender=account,
+                confirmations_required=0,
+            )
+
         return str(receipt.txn_hash)
 
     server.run(transport="http")
