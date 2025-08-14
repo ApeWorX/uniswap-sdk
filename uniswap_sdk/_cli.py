@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from decimal import Decimal
 
 import click
-from ape.cli import ConnectedProviderCommand, account_option, network_option
+from ape.cli import ConnectedProviderCommand, account_option, network_option, verbosity_option
 from ape_tokens import Token, tokens
 
 from uniswap_sdk import Uniswap
@@ -135,6 +135,7 @@ def swap(
 
 
 @cli.command(cls=ConnectedProviderCommand)
+@verbosity_option(default=100_000)  # NOTE: Disabled
 @network_option()
 @account_option()
 @intermediate_tokens()
@@ -160,7 +161,8 @@ def mcp(ecosystem, network, filter_tokens, account):
         # Uniswap MCP Server
 
         This server provides capabilities for pricing and swapping tokens
-        using the Uniswap protocol on {ecosystem.name}:{network.name}.
+        using the Uniswap protocol on {ecosystem.name}:{network.name}
+        for the user account {account.address}.
         """,
     )
 
