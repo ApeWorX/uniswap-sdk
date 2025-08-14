@@ -72,6 +72,43 @@ You can use this command to do common tasks with the SDK such as finding prices 
 
 Try `uni --help` after installing the SDK to learn more about what the CLI can do.
 
+### MCP Tool
+
+If you want to use this SDK w/ an LLM that supports tool calling via MCP, there is a CLI method for that!
+
+First off, you need to install Ape, relevant Ape plugins (such as Wallets, Explorers, Data & RPC Providers, etc.).
+Then, you should configure wallets for use in Ape (see the [Ape docs](https://docs.apeworx.io/ape/latest/userguides/accounts#live-network-accounts) on setting up a wallet for live network use).
+Finally, install this SDK and launch the MCP tool via:
+
+```sh
+uni mcp --network ... --account ... --token WETH --token ...
+```
+
+This will launch the MCP server completely locally (connected to your local accounts).
+Configure your preferred LLM to use this MCP tool via config.
+
+Claude-style Config file:
+
+```json
+  ...
+  "mcpServers": {
+    ...
+    "Uniswap": {
+      "url": "http://127.0.0.1:8000/mcp/"
+    },
+    ...
+  }
+  ...
+```
+
+Then prompt!
+
+```{notice}
+Sending swaps via MCP can be very dangerous if you don't know what you're doing,
+however thanks to how the MCP server functions you will need to approve every transaction it initiates.
+Take care to verify each transaction to ensure that the tool call was successfully translated.
+```
+
 ### Silverback
 
 The SDK has special support for use within [Silverback](https://silverback.apeworx.io) bots,
