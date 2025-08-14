@@ -240,4 +240,4 @@ def mcp(ecosystem, network, filter_tokens, account):
 
         return str(receipt.txn_hash)
 
-    server.run(transport="http")
+    server.run()
