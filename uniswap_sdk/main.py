@@ -332,20 +332,27 @@ class Uniswap(ManagerAccessMixin):
         value: str | int | None = None,
         **order_and_txn_kwargs,
     ) -> "ReceiptAPI | TransactionAPI":
-        order_kwargs: dict = dict()
         if not order:
+            order_kwargs: dict = dict()
             field: str  # NOTE: mypy happy
             for field in set(ExactInOrder.model_fields) | set(ExactOutOrder.model_fields):
-                if field in order_and_txn_kwargs:
-                    order_kwargs[field] = order_and_txn_kwargs.pop(field)
+                if (
+                    field in order_and_txn_kwargs
+                    # NOTE: We want to remove it from `order_and_txn_kwargs` but not use it if None
+                    and (value := order_and_txn_kwargs.pop(field)) is not None
+                ):
+                    order_kwargs[field] = value
 
-            if value:
+            if value is not None:
                 order_kwargs["have"] = "WETH"
 
-                if "amount_out" in order_kwargs and "max_amount_in" not in order_kwargs:
+                if (
+                    order_kwargs.get("amount_out") is not None
+                    and order_kwargs.get("max_amount_in") is None
+                ):
                     order_kwargs["max_amount_in"] = self.conversion_manager.convert(value, int)
 
-                elif "amount_in" not in order_kwargs:
+                elif order_kwargs.get("amount_in") is None:
                     order_kwargs["amount_in"] = self.conversion_manager.convert(value, int)
 
             if native_out or order_kwargs.get("want") == "ether":
@@ -391,7 +398,6 @@ class Uniswap(ManagerAccessMixin):
             native_in=bool(value),
             native_out=native_out,
             receiver=receiver,
-            **order_kwargs,
         )
 
         return (self.router.plan_as_transaction if as_transaction else self.router.execute)(
