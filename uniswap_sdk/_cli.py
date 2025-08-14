@@ -169,6 +169,9 @@ def mcp(ecosystem, network, filter_tokens, account):
     async def get_token_balance(token: str) -> Decimal:
         """Get the token balance of the user's account."""
 
+        if token in ("ether", "ETH"):
+            return account.balance * Decimal("1e-18")
+
         from ape import convert
         from ape.types import AddressType
 
