@@ -183,7 +183,10 @@ def convert_solution_to_plan(
             # NOTE: Should never happen
             raise ValueError(f"Invalid route: {route}")
 
-    if native_in or native_out:
+    if native_in:
+        plan = plan.unwrap_weth(receiver, 0)  # NOTE: In case of any extra
+
+    elif native_out:
         plan = plan.unwrap_weth(receiver, int(total_amount_out * 10**18))
 
     return plan
