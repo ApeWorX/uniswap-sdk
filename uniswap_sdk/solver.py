@@ -110,6 +110,8 @@ def convert_solution_to_plan(
     order: Order,
     solution: Solution,
     permit_step: ur.Command | None = None,
+    native_in: bool = False,
+    native_out: bool = False,
     receiver: AddressType | None = None,
 ) -> ur.Plan:
     ONE_HAVE_TOKEN = 10 ** order.have_token.decimals()
@@ -120,14 +122,18 @@ def convert_solution_to_plan(
     total_amount_out = order.min_amount_out if use_exact_in else order.amount_out
 
     plan = ur.Plan()
-    if permit_step:
+    if native_in:
+        plan = plan.wrap_eth(ur.Constants.ADDRESS_THIS, int(total_amount_in * 10**18))
+
+    elif permit_step:
         plan = plan.add(permit_step)
 
     # TODO: Add donation support
+
     if receiver is None:
         receiver = ur.Constants.MSG_SENDER
 
-    payer_is_user = True  # False = Payer is Router
+    payer_is_user = not native_in  # False = Payer is Router
 
     for route, flow_ratio in solution.items():
         # Percentage of `total_amount_in/_out` that should come from this swap
@@ -137,7 +143,7 @@ def convert_solution_to_plan(
         if all(isinstance(p, v3.Pool) for p in route):
             if use_exact_in:
                 plan = plan.v3_swap_exact_in(
-                    receiver,
+                    ur.Constants.ADDRESS_THIS if native_out else receiver,
                     int(amount_in_route * ONE_HAVE_TOKEN),  # amountIn
                     int(amount_out_route * ONE_WANT_TOKEN),  # amountOutMin
                     v3.Factory.encode_route(order.have_token, *route),
@@ -146,17 +152,18 @@ def convert_solution_to_plan(
 
             else:
                 plan = plan.v3_swap_exact_out(
-                    receiver,
+                    ur.Constants.ADDRESS_THIS if native_out else receiver,
                     int(amount_out_route * ONE_WANT_TOKEN),  # amountOut
                     int(amount_in_route * ONE_HAVE_TOKEN),  # amountInMax
-                    v3.Factory.encode_route(order.have_token, *route),
+                    # NOTE: For v3, exact out swap must be encoded in reverse order
+                    v3.Factory.encode_route(order.want_token, *reversed(route)),
                     payer_is_user,
                 )
 
         elif all(isinstance(p, v2.Pair) for p in route):
             if use_exact_in:
                 plan = plan.v2_swap_exact_in(
-                    receiver,
+                    ur.Constants.ADDRESS_THIS if native_out else receiver,
                     int(amount_in_route * ONE_HAVE_TOKEN),  # amountIn
                     int(amount_out_route * ONE_WANT_TOKEN),  # amountOutMin
                     v2.Factory.encode_route(order.have_token, *route),
@@ -165,7 +172,7 @@ def convert_solution_to_plan(
 
             else:
                 plan = plan.v2_swap_exact_out(
-                    receiver,
+                    ur.Constants.ADDRESS_THIS if native_out else receiver,
                     int(amount_out_route * ONE_WANT_TOKEN),  # amountOut
                     int(amount_in_route * ONE_HAVE_TOKEN),  # amountInMax
                     v2.Factory.encode_route(order.have_token, *route),
@@ -175,5 +182,11 @@ def convert_solution_to_plan(
         else:
             # NOTE: Should never happen
             raise ValueError(f"Invalid route: {route}")
+
+    if native_in:
+        plan = plan.unwrap_weth(receiver, 0)  # NOTE: In case of any extra
+
+    elif native_out:
+        plan = plan.unwrap_weth(receiver, int(total_amount_out * 10**18))
 
     return plan

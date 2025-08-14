@@ -58,7 +58,7 @@ class Uniswap(ManagerAccessMixin):
         use_solver: SolverType | None = None,
     ):
         if default_slippage is not None:
-            self.DEFAULT_SLIPPAGE = Decimal(default_slippage)
+            self.DEFAULT_SLIPPAGE = Decimal(default_slippage).quantize(Decimal("1e-5"))
 
         self.permit2 = Permit2()
         self.router = ur.UniversalRouter()
@@ -224,7 +224,7 @@ class Uniswap(ManagerAccessMixin):
 
             else:  # NOTE: Compute slippage (for solver) based on provided inputs
                 slippage = (
-                    (price := self.price(have, want) - amount_out / max_amount_in) / price
+                    ((price := self.price(have, want)) - amount_out / max_amount_in) / price
                 ).quantize(Decimal("1e-5"))
 
             return ExactOutOrder(
@@ -242,7 +242,7 @@ class Uniswap(ManagerAccessMixin):
 
             else:  # NOTE: Compute slippage (for solver) based on provided inputs
                 slippage = (
-                    (price := self.price(have, want) - min_amount_out / amount_in) / price
+                    ((price := self.price(have, want)) - min_amount_out / amount_in) / price
                 ).quantize(Decimal("1e-5"))
 
             return ExactInOrder(
@@ -275,6 +275,8 @@ class Uniswap(ManagerAccessMixin):
         order: Order | None = None,
         routes: Iterable[Route] | None = None,
         permit_step: ur.Command | None = None,
+        native_in: bool = False,
+        native_out: bool = False,
         receiver: "str | BaseAddress | AddressType | None" = None,
         **order_kwargs,
     ) -> ur.Plan:
@@ -297,6 +299,8 @@ class Uniswap(ManagerAccessMixin):
             order,
             solution,
             permit_step=permit_step,
+            native_in=native_in,
+            native_out=native_out,
             receiver=receiver,
         )
 
@@ -322,8 +326,10 @@ class Uniswap(ManagerAccessMixin):
         order: Order | None = None,
         routes: Iterable[Route] | None = None,
         receiver: "str | BaseAddress | AddressType | None" = None,
+        native_out: bool = False,
         as_transaction: bool = False,
         deadline: timedelta | None = None,
+        value: str | int | None = None,
         **order_and_txn_kwargs,
     ) -> "ReceiptAPI | TransactionAPI":
         order_kwargs: dict = dict()
@@ -333,49 +339,64 @@ class Uniswap(ManagerAccessMixin):
                 if field in order_and_txn_kwargs:
                     order_kwargs[field] = order_and_txn_kwargs.pop(field)
 
+            if value:
+                order_kwargs["have"] = "WETH"
+
+                if "amount_out" in order_kwargs and "max_amount_in" not in order_kwargs:
+                    order_kwargs["max_amount_in"] = self.conversion_manager.convert(value, int)
+
+                elif "amount_in" not in order_kwargs:
+                    order_kwargs["amount_in"] = self.conversion_manager.convert(value, int)
+
+            if native_out or order_kwargs.get("want") == "ether":
+                order_kwargs["want"] = "WETH"
+                native_out = True
+
             order = self.create_order(**order_kwargs)
 
-        have = order.have_token if order else order_and_txn_kwargs.get("have", order_kwargs["have"])
-        if not isinstance(have, TokenInstance):
-            have = Token.at(self.conversion_manager.convert(have, AddressType))
-
-        from ape.api import AccountAPI
-
         permit_step = None
-        if not isinstance(sender := order_and_txn_kwargs.get("sender"), AccountAPI):
-            logger.warning("No `sender` present to sign permits with")
+        if not value:
+            from ape.api import AccountAPI
 
-        elif have.allowance(sender, self.permit2.contract) < (
-            amount := order.amount_in if isinstance(order, ExactInOrder) else order.max_amount_in
-        ):
-            logger.warning(
-                f"Permit2 '{self.permit2.contract}' needs approval from '{sender}' "
-                f"to spend at least {amount} {have.symbol()}."
-            )
+            if not isinstance(sender := order_and_txn_kwargs.get("sender"), AccountAPI):
+                logger.warning("No `sender` present to sign permits with")
 
-        else:
-            expiration = datetime.now(timezone.utc) + (deadline or timedelta(minutes=2))
-            permit_step = self.permit2.sign_permit(
-                spender=self.router.contract,
-                permit=PermitDetails(  # type: ignore[call-arg]
-                    token=have.address,
-                    amount=int(amount * 10 ** have.decimals()),
-                    expiration=int(expiration.timestamp()),
-                    nonce=self.permit2.get_nonce(sender, have, self.router.contract),
-                ),
-                signer=sender,
-            )
+            elif order.have_token.allowance(sender, self.permit2.contract) < (
+                amount := (
+                    order.amount_in if isinstance(order, ExactInOrder) else order.max_amount_in
+                )
+            ):
+                logger.warning(
+                    f"Permit2 '{self.permit2.contract}' needs approval from '{sender}' "
+                    f"to spend at least {amount} {order.have_token.symbol()}."
+                )
+
+            else:
+                expiration = datetime.now(timezone.utc) + (deadline or timedelta(minutes=2))
+                permit_step = self.permit2.sign_permit(
+                    spender=self.router.contract,
+                    permit=PermitDetails(  # type: ignore[call-arg]
+                        token=order.have,
+                        amount=int(amount * 10 ** order.have_token.decimals()),
+                        expiration=int(expiration.timestamp()),
+                        nonce=self.permit2.get_nonce(sender, order.have, self.router.contract),
+                    ),
+                    signer=sender,
+                )
 
         plan = self.create_plan(
             order=order,
             routes=routes,
             permit_step=permit_step,
+            native_in=bool(value),
+            native_out=native_out,
             receiver=receiver,
             **order_kwargs,
         )
 
-        if as_transaction:
-            return self.router.plan_as_transaction(plan, deadline=deadline, **order_and_txn_kwargs)
-
-        else:
-            return self.router.execute(plan, deadline=deadline, **order_and_txn_kwargs)
+        return (self.router.plan_as_transaction if as_transaction else self.router.execute)(
+            plan,
+            deadline=deadline,
+            value=value,
+            **order_and_txn_kwargs,
+        )
