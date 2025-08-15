@@ -1,9 +1,12 @@
 from contextlib import asynccontextmanager
 from decimal import Decimal
+from typing import Annotated
 
 import click
 from ape.cli import ConnectedProviderCommand, account_option, network_option, verbosity_option
+from ape.types import AddressType
 from ape_tokens import Token, tokens
+from pydantic import Field
 
 from uniswap_sdk import Uniswap
 
@@ -168,8 +171,10 @@ def mcp(ecosystem, network, filter_tokens, account):
 
     # TODO: Move this to ape-tokens?
     @server.tool()
-    async def get_token_balance(token: str) -> Decimal:
-        """Get the token balance of the user's account."""
+    async def get_token_balance(
+        token: Annotated[str | AddressType, Field(description="The token symbol or address")],
+    ) -> Decimal:
+        """Get the balance of `token` in the user's account."""
 
         if token in ("ether", "ETH"):
             return account.balance * Decimal("1e-18")
@@ -183,24 +188,94 @@ def mcp(ecosystem, network, filter_tokens, account):
         )
 
     @server.tool()
-    async def get_price(ctx: Context, base: str, quote: str) -> Decimal:
-        """Get the current price of BASE in terms of QUOTE."""
-        uni = ctx.request_context.lifespan_context
+    async def get_price(
+        ctx: Context,
+        base: Annotated[
+            str | AddressType,
+            Field(description="The token symbol or address you want to know the price of"),
+        ],
+        quote: Annotated[
+            str | AddressType,
+            Field(description="The token symbol or address which the price will be expressed"),
+        ],
+    ) -> Decimal:
+        """
+        Returns the current exchange rate between two tokens, `base` and `quote`, as observed
+        across all relevant markets in the Uniswap protocol. This price reflects the starting rate
+        at which a trade on Uniswap will begin, and it does not include slippage or market impact
+        from conducting an actual trade. due to the mechanics of the Uniswap AMM model.
 
+        **Important Notes**:
+        1. It is only intended to use this price as a reference.
+        2. The number will be returned as a decimal value, reflecting the precision of the market
+           price. Do not scale or re-interpret this number.
+        3. The number should be interpretted as being the number of `quote` tokens that equals
+           exactly 1 `base` token by the current market, or in the context of `quote` per `base`.
+        """
+
+        uni = ctx.request_context.lifespan_context
         return uni.price(base, quote)
 
     @server.tool()
     async def swap(
         ctx: Context,
-        have: str,
-        want: str,
-        amount_in: Decimal | None = None,
-        max_amount_in: Decimal | None = None,
-        amount_out: Decimal | None = None,
-        min_amount_out: Decimal | None = None,
-        slippage: Decimal | None = None,
+        have: Annotated[
+            str | AddressType,
+            Field(description="The token symbol or address you want to sell"),
+        ],
+        want: Annotated[
+            str | AddressType,
+            Field(description="The token symbol or address you want to buy"),
+        ],
+        amount_in: Annotated[
+            Decimal | None,
+            Field(
+                description="The amount of `have` tokens you want to sell."
+                " Leave empty if using `amount_out`."
+            ),
+        ] = None,
+        max_amount_in: Annotated[
+            Decimal | None,
+            Field(
+                description="The maximum amount of `have` tokens you are willing to sell."
+                " Leave empty to auto-compute this amount when `amount_out` is provided."
+            ),
+        ] = None,
+        amount_out: Annotated[
+            Decimal | None,
+            Field(
+                description="The amount of `want` tokens you want to buy."
+                " Leave empty if using `amount_in`."
+            ),
+        ] = None,
+        min_amount_out: Annotated[
+            Decimal | None,
+            Field(
+                description="The minimum amount of `want` tokens you want to buy."
+                " Leave empty to auto-compute this amount when `amount_in` is provided."
+            ),
+        ] = None,
+        slippage: Annotated[
+            Decimal | None,
+            Field(
+                description="""
+                The maximum change in equilibrium price you are willing to accept.
+                Quantity is a value-less ratio, convert to a ratio if user specifies a percent.
+                Leave empty to use the default of `0.005` (0.5%),
+                or when `max_amount_in`/`min_amount_out` are provided.
+                """
+            ),
+        ] = None,
     ) -> str:
-        """Swap HAVE for WANT using the configured swap options."""
+        """
+        Performs a token swap, converting an amount of have tokens into want tokens. This function
+        is designed to execute trades on-chain and accounts for real-world dynamics such as
+        slippage and market impact.
+
+        **Important Note**: This function will account for market shifts, which can be set by the
+        `slippage`, `max_amount_in`, or `min_amount_out` parameters. Use these to protect against
+        adverse market changes while executing the user's order.
+        """
 
         # NOTE: FastMCP doesn't actually support `Decimal` auto-casting yet
         if isinstance(amount_in, str):
