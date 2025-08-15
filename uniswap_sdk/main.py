@@ -326,6 +326,7 @@ class Uniswap(ManagerAccessMixin):
         order: Order | None = None,
         routes: Iterable[Route] | None = None,
         receiver: "str | BaseAddress | AddressType | None" = None,
+        native_in: bool = False,
         native_out: bool = False,
         as_transaction: bool = False,
         deadline: timedelta | None = None,
@@ -334,35 +335,42 @@ class Uniswap(ManagerAccessMixin):
     ) -> "ReceiptAPI | TransactionAPI":
         if not order:
             order_kwargs: dict = dict()
-            field: str  # NOTE: mypy happy
-            for field in set(ExactInOrder.model_fields) | set(ExactOutOrder.model_fields):
+            field_name: str  # NOTE: mypy happy
+            for field_name in set(ExactInOrder.model_fields) | set(ExactOutOrder.model_fields):
                 if (
-                    field in order_and_txn_kwargs
+                    field_name in order_and_txn_kwargs
                     # NOTE: We want to remove it from `order_and_txn_kwargs` but not use it if None
-                    and (value := order_and_txn_kwargs.pop(field)) is not None
+                    and (field_value := order_and_txn_kwargs.pop(field_name)) is not None
                 ):
-                    order_kwargs[field] = value
+                    order_kwargs[field_name] = field_value
 
-            if value is not None:
+            if value is not None or native_in or order_kwargs.get("have") in ("ether", "ETH"):
                 order_kwargs["have"] = "WETH"
+                native_in = True
 
-                if (
-                    order_kwargs.get("amount_out") is not None
-                    and order_kwargs.get("max_amount_in") is None
-                ):
-                    order_kwargs["max_amount_in"] = self.conversion_manager.convert(value, int)
+            elif native_out or order_kwargs.get("want") in ("ether", "ETH"):
+                order_kwargs["want"] = "WETH"
+                native_out = True
+
+            if native_in and value is not None:
+                if order_kwargs.get("amount_out") is not None:
+                    if order_kwargs.get("max_amount_in") is None:
+                        order_kwargs["max_amount_in"] = self.conversion_manager.convert(value, int)
 
                 elif order_kwargs.get("amount_in") is None:
                     order_kwargs["amount_in"] = self.conversion_manager.convert(value, int)
 
-            if native_out or order_kwargs.get("want") == "ether":
-                order_kwargs["want"] = "WETH"
-                native_out = True
-
             order = self.create_order(**order_kwargs)
 
         permit_step = None
-        if not value:
+        if native_in:
+            if value is None:
+                eth_amount = (
+                    order.amount_in if isinstance(order, ExactInOrder) else order.max_amount_in
+                )
+                value = f"{eth_amount} ether"
+
+        else:
             from ape.api import AccountAPI
 
             if not isinstance(sender := order_and_txn_kwargs.get("sender"), AccountAPI):
@@ -395,7 +403,7 @@ class Uniswap(ManagerAccessMixin):
             order=order,
             routes=routes,
             permit_step=permit_step,
-            native_in=bool(value),
+            native_in=native_in,
             native_out=native_out,
             receiver=receiver,
         )

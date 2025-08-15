@@ -202,44 +202,28 @@ def mcp(ecosystem, network, filter_tokens, account):
     ) -> str:
         """Swap HAVE for WANT using the configured swap options."""
 
+        # NOTE: FastMCP doesn't actually support `Decimal` auto-casting yet
+        if isinstance(amount_in, str):
+            amount_in = Decimal(amount_in)
+        if isinstance(max_amount_in, str):
+            max_amount_in = Decimal(max_amount_in)
+        if isinstance(amount_out, str):
+            amount_out = Decimal(amount_out)
+        if isinstance(min_amount_out, str):
+            min_amount_out = Decimal(min_amount_out)
+
         uni = ctx.request_context.lifespan_context
-        if have in ("ETH", "ether"):
-            receipt = uni.swap(
-                want=want,
-                amount_out=amount_out,
-                min_amount_out=min_amount_out,
-                slippage=slippage,
-                value=f"{amount_in or max_amount_in} ether",
-                sender=account,
-                confirmations_required=0,
-            )
-
-        elif want in ("ETH", "ether"):
-            receipt = uni.swap(
-                have=have,
-                amount_in=amount_in,
-                max_amount_in=max_amount_in,
-                amount_out=amount_out,
-                min_amount_out=min_amount_out,
-                slippage=slippage,
-                native_out=True,
-                sender=account,
-                confirmations_required=0,
-            )
-
-        else:  # ERC20 <> ERC20 swap
-            receipt = uni.swap(
-                have=have,
-                want=want,
-                amount_in=amount_in,
-                max_amount_in=max_amount_in,
-                amount_out=amount_out,
-                min_amount_out=min_amount_out,
-                slippage=slippage,
-                sender=account,
-                confirmations_required=0,
-            )
-
+        receipt = uni.swap(
+            have=have,
+            want=want,
+            amount_in=amount_in,
+            max_amount_in=max_amount_in,
+            amount_out=amount_out,
+            min_amount_out=min_amount_out,
+            slippage=slippage,
+            sender=account,
+            confirmations_required=0,
+        )
         return str(receipt.txn_hash)
 
     server.run()
