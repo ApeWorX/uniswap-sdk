@@ -8,11 +8,11 @@ from ape.exceptions import DecodingError
 from ape.managers.base import ManagerAccessMixin
 from ape.utils import StructParser, cached_property
 from ape_ethereum.ecosystem import parse_type
-from eth_abi import decode as abi_decode
-from eth_abi import encode as abi_encode
-from eth_abi.exceptions import InsufficientDataBytes
-from eth_abi.packed import encode_packed
 from ethpm_types.abi import ABIType, MethodABI
+from faster_eth_abi import decode as abi_decode
+from faster_eth_abi import encode as abi_encode
+from faster_eth_abi.exceptions import InsufficientDataBytes
+from faster_eth_abi.packed import encode_packed
 from hexbytes import HexBytes
 from pydantic import BaseModel, field_validator
 

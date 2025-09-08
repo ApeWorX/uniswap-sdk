@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from ape.types import AddressType
 from ape_tokens import TokenInstance
-from eth_utils import to_int
-from eth_utils.address import is_checksum_address
+from faster_eth_utils import to_int
+from faster_eth_utils.address import is_checksum_address
 
 from .types import BasePair, ConvertsToToken, Fee, Route
 

@@ -58,6 +58,8 @@ setup(
     include_package_data=True,
     install_requires=[
         "eth-ape>=0.8.33,<1",
+        "faster-eth-abi>=5.1.0,<6",
+        "faster-eth-utils>=2.1.0,<6",
         # Graph library for solving (Requires Python 3.10+)
         "networkx>=3.4.2,<4",
         # Required plugin for working with tokens

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Generic, Iterable, Iterator, TypeVar
 from ape.types import AddressType
 from ape.utils import ManagerAccessMixin, cached_property
 from ape_tokens import Token, TokenInstance
-from eth_utils import is_checksum_address
+from faster_eth_utils import is_checksum_address
 from pydantic import BaseModel, Field, model_validator
 
 if TYPE_CHECKING:
