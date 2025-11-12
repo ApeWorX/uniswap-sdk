@@ -1,0 +1,7 @@
+# NOTE: Must include this package as it's own dependency
+uniswap-sdk
+# Plugins for bots
+ape-tokens
+ape-alchemy
+ape-infura
+ape-aws
