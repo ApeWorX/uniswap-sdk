@@ -63,8 +63,10 @@ def get_liquidity(token: TokenInstance, route: Route) -> Decimal:
 
         token = pair.other(token)
 
-    assert liquidity != Decimal("inf")
-    return liquidity
+    if liquidity < Decimal("inf"):
+        return liquidity
+
+    return Decimal(0)
 
 
 def get_total_fee(route: Route) -> Decimal:
