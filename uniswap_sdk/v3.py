@@ -9,8 +9,8 @@ from ape.types import AddressType
 from ape.utils import ZERO_ADDRESS, cached_property
 from ape_ethereum import multicall
 from ape_tokens import TokenInstance
-from eth_utils import to_int
-from eth_utils.address import to_checksum_address
+from faster_eth_utils import to_int
+from faster_eth_utils.address import to_checksum_address
 from pydantic import BaseModel, Field
 
 from .packages import V3, get_contract_instance
