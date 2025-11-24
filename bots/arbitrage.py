@@ -65,7 +65,7 @@ async def rm_inventory_tokenB(log):
     return {TOKENB.symbol(): bot.state.inventory[TOKENB]}
 
 
-@bot.cron("* * * * *")
+@bot.cron(os.environ.get("MEASUREMENT_CRON", "*/5 * * * *"))
 async def current_price(_):
     return uni.price(TOKENA, TOKENB)
 
