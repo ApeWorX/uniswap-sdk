@@ -66,14 +66,14 @@ async def rm_inventory_tokenB(log):
 
 
 @bot.cron(os.environ.get("MEASUREMENT_CRON", "*/5 * * * *"))
-async def current_price(_):
+async def price(_):
     return uni.price(TOKENA, TOKENB)
 
 
-@bot.on_metric("current_price")
-async def price_delta(current_price: Decimal):
+@bot.on_metric("price")
+async def price_delta(price: Decimal):
     # NOTE: Have a more accurate reference model in production use
-    return current_price - REFERENCE_PRICE
+    return price - REFERENCE_PRICE
 
 
 @bot.on_metric("price_delta", lt=-ARB_THRESHOLD)
