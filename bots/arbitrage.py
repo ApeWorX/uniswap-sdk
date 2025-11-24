@@ -24,9 +24,11 @@ ARB_THRESHOLD = Decimal(os.environ.get("ARBITRAGE_THRESHOLD", "0.025")) * REFERE
 MAX_SWAP_SIZE_TOKENA = Decimal(os.environ.get("MAX_SWAP_SIZE_TOKENA", "inf"))
 MAX_SWAP_SIZE_TOKENB = Decimal(os.environ.get("MAX_SWAP_SIZE_TOKENB", "inf"))
 
+USE_PRIVATE_MEMPOOL = bool(os.environ.get("USE_PRIVATE_MEMPOOL", False))
+
 
 @bot.on_startup()
-async def fetch_balaces(_ss):
+async def load_inventory(_ss):
     bot.state.inventory = {
         TOKENA: Decimal(TOKENA.balanceOf(bot.signer)) / Decimal(10 ** TOKENA.decimals()),
         TOKENB: Decimal(TOKENB.balanceOf(bot.signer)) / Decimal(10 ** TOKENB.decimals()),
@@ -85,6 +87,7 @@ async def buy(_):
                 amount_in=sell_amount,
                 min_amount_out=sell_amount * REFERENCE_PRICE,
                 sender=bot.signer,
+                private=USE_PRIVATE_MEMPOOL,
             )
 
         except ContractLogicError:
@@ -102,6 +105,7 @@ async def sell(_):
                 amount_in=sell_amount,
                 min_amount_out=sell_amount * REFERENCE_PRICE,
                 sender=bot.signer,
+                private=USE_PRIVATE_MEMPOOL,
             )
 
         except ContractLogicError:
