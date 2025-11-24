@@ -6,10 +6,6 @@ on:
   release:
     type: [published]
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ApeWorX/uniswap
-
 jobs:
   bots:
     runs-on: ubuntu-latest
@@ -24,6 +20,5 @@ jobs:
         with:
             push: ${{ github.event_name != 'pull_request' }}
             tag:  ${{ github.event_name == 'release' && 'stable' || 'latest' }}
-            registry: ghcr.io
             username: ${{ github.actor }}
             password: ${{ secrets.GITHUB_TOKEN }}
