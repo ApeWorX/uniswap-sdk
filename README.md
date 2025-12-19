@@ -94,7 +94,28 @@ Claude-style Config file:
   "mcpServers": {
     ...
     "Uniswap": {
-      "url": "http://127.0.0.1:8000/mcp/"
+      "command": "/home/doggie/.local/bin/uvx",
+      "args": [
+        "--from",
+        "uniswap-sdk[mcp]",
+        // Plugins you need
+        "--with",
+        "ape-base",
+        "--with",
+        "ape-frame",
+        "uni",
+        "mcp",
+        // Tokens you want to index
+        "--token",
+        "WETH",
+        "--network",
+        // Network you want to use (include provider!)
+        "base:mainnet:node",
+        // Account you want to use for checking balances & trading with
+        "--account",
+        "frame"
+      ]
+    },
     },
     ...
   }
