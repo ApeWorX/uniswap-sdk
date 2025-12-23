@@ -57,7 +57,8 @@ setup(
     url="https://github.com/ApeWorX/uniswap-sdk",
     include_package_data=True,
     install_requires=[
-        "eth-ape>=0.8.33,<1",
+        "eth-ape>=0.8.43,<1",
+        "eip712>=0.3",
         # Graph library for solving (Requires Python 3.10+)
         "networkx>=3.4.2,<4",
         # Required plugin for working with tokens

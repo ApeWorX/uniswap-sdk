@@ -4,7 +4,9 @@ from typing import TYPE_CHECKING
 from ape.logging import logger
 from ape.types import AddressType
 from ape.utils import ManagerAccessMixin
-from eip712 import EIP712Message, EIP712Type
+from eip712 import EIP712Domain, EIP712Message
+from eth_pydantic_types import abi
+from pydantic import BaseModel
 
 from .packages import PERMIT2, get_contract_instance
 from .universal_router import PERMIT2_PERMIT, PERMIT2_PERMIT_BATCH
@@ -13,23 +15,23 @@ if TYPE_CHECKING:
     from ape.api import AccountAPI, BaseAddress
 
 
-class PermitDetails(EIP712Type):
-    token: "address"  # type: ignore[name-defined]  # noqa
-    amount: "uint160"  # type: ignore[name-defined]  # noqa
-    expiration: "uint48"  # type: ignore[name-defined]  # noqa
-    nonce: "uint48"  # type: ignore[name-defined]  # noqa
+class PermitDetails(BaseModel):
+    token: abi.address
+    amount: abi.uint160  # type: ignore[name-defined]  # noqa
+    expiration: abi.uint48
+    nonce: abi.uint48
 
 
 class PermitSingle(EIP712Message):
     details: PermitDetails
-    spender: "address"  # type: ignore[name-defined]  # noqa
-    sigDeadline: "uint256"  # type: ignore[name-defined]  # noqa
+    spender: abi.address
+    sigDeadline: abi.uint256
 
 
 class PermitBatch(EIP712Message):
     details: list[PermitDetails]
-    spender: "address"  # type: ignore[name-defined]  # noqa
-    sigDeadline: "uint256"  # type: ignore[name-defined]  # noqa
+    spender: abi.address
+    sigDeadline: abi.uint256
 
 
 class Permit2(ManagerAccessMixin):
@@ -62,11 +64,11 @@ class Permit2(ManagerAccessMixin):
         return self.contract.allowance(user, token, spender).expiration
 
     @property
-    def DOMAIN(self) -> dict:
-        return dict(
-            _name_="Permit2",
-            _chainId_=self.chain_manager.chain_id,
-            _verifyingContract_=self.contract.address,
+    def DOMAIN(self) -> EIP712Domain:
+        return EIP712Domain(
+            name="Permit2",
+            chainId=self.chain_manager.chain_id,
+            verifyingContract=self.contract.address,
         )
 
     def sign_permit(
@@ -87,17 +89,13 @@ class Permit2(ManagerAccessMixin):
                 details=permit,
                 spender=spender,
                 sigDeadline=sigDeadline,
-                **self.DOMAIN,
+                eip712_domain=self.DOMAIN,  # type: ignore
             )
         )
 
         return PERMIT2_PERMIT(
             args=[
-                (
-                    permit.__tuple__,  # type: ignore[attr-defined]
-                    spender,
-                    sigDeadline,
-                ),
+                (tuple(permit.model_dump().values()), spender, sigDeadline),
                 signature.encode_rsv(),
             ]
         )
@@ -122,14 +120,14 @@ class Permit2(ManagerAccessMixin):
                 details=permits,
                 spender=spender,
                 sigDeadline=sigDeadline,
-                **self.DOMAIN,
+                eip712_domain=self.DOMAIN,  # type: ignore
             )
         )
 
         return PERMIT2_PERMIT_BATCH(
             args=[
                 (
-                    [p.__tuple__ for p in permits],  # type: ignore[attr-defined]
+                    [tuple(p.model_dump().values()) for p in permits],
                     spender,
                     sigDeadline,
                 ),
