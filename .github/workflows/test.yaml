@@ -15,7 +15,7 @@ jobs:
             python-version: "3.10"
 
         - name: Install Dependencies
-          run: pip install .[lint,bot]
+          run: pip install .[lint,bot,mcp]
 
         - name: Run Black
           run: black --check .
@@ -38,7 +38,7 @@ jobs:
             python-version: "3.10"
 
         - name: Install Dependencies
-          run: pip install .[lint,test,bot]  # Might need test deps
+          run: pip install .[lint,test,bot,mcp]  # Might need test deps
 
         - name: Run MyPy
           run: mypy .
