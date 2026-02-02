@@ -110,6 +110,7 @@ def convert_solution_to_plan(
     order: Order,
     solution: Solution,
     permit_step: ur.Command | None = None,
+    payer_is_user: bool = True,  # False = Payer is Router
     native_in: bool = False,
     native_out: bool = False,
     receiver: AddressType | None = None,
@@ -133,7 +134,8 @@ def convert_solution_to_plan(
     if receiver is None:
         receiver = ur.Constants.MSG_SENDER
 
-    payer_is_user = not native_in  # False = Payer is Router
+    if native_in:
+        payer_is_user = False
 
     for route, flow_ratio in solution.items():
         # Percentage of `total_amount_in/_out` that should come from this swap
