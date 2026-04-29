@@ -14,7 +14,7 @@ from .permit2 import Permit2, PermitDetails
 from .solver import Solution, SolverType, convert_solution_to_plan
 from .solver import solve as default_solver
 from .types import BaseIndex, BasePair, ConvertsToToken, ExactInOrder, ExactOutOrder, Order, Route
-from .utils import get_liquidity, get_price
+from .utils import get_liquidity, get_price, safe_symbol
 
 if TYPE_CHECKING:
     from ape.api import BaseAddress, ReceiptAPI, TransactionAPI
@@ -368,7 +368,7 @@ class Uniswap(ManagerAccessMixin):
             ):
                 logger.warning(
                     f"Permit2 '{self.permit2.contract}' needs approval from '{sender}' "
-                    f"to spend at least {amount} {order.have_token.symbol()}."
+                    f"to spend at least {amount} {safe_symbol(order.have_token)}."
                 )
 
             else:
