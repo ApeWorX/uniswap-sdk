@@ -309,10 +309,15 @@ class Pair(BasePair):
         return isinstance(other, Pair) and self.address == other.address
 
     def __repr__(self) -> str:
+        try:
+            pair = f"{self.token0.symbol()}/{self.token1.symbol()}"
+        except Exception:
+            pair = f"{self.token0.address}/{self.token1.address}"
+
         return (
             f"<{self.__class__.__module__}.{self.__class__.__name__} "
             f"address={self.address} "
-            f"pair='{self.token0.symbol()}/{self.token1.symbol()}'>"
+            f"pair='{pair}'>"
         )
 
     @cached_property
