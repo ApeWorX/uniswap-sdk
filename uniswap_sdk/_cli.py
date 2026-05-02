@@ -5,6 +5,7 @@ from ape.cli import ConnectedProviderCommand, account_option, network_option
 from ape_tokens import Token, tokens
 
 from uniswap_sdk import Uniswap
+from uniswap_sdk.utils import safe_symbol
 
 
 def token_arg(arg_name: str, **kwargs):
@@ -57,7 +58,7 @@ def price(base, quote, filter_tokens, min_liquidity):
         min_liquidity=min_liquidity,
     )
 
-    click.echo(f"{price:.04f} [{base.symbol()}/{quote.symbol()}]")
+    click.echo(f"{price:.04f} [{safe_symbol(base)}/{safe_symbol(quote)}]")
 
 
 @cli.command(cls=ConnectedProviderCommand)

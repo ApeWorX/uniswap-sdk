@@ -18,6 +18,15 @@ PairType = TypeVar("PairType", bound="BasePair")
 Route = tuple[PairType, ...]
 
 
+def safe_symbol(token: TokenInstance) -> str:
+    # NOTE: Some tokens (e.g. MKR) return `bytes32` from `symbol()`, which breaks ABI decoding.
+    # Fall back to the address so display/logging code paths never crash on quirky tokens.
+    try:
+        return token.symbol()
+    except Exception:
+        return token.address
+
+
 class BaseOrder(BaseModel, ManagerAccessMixin):
     have: AddressType
     want: AddressType
@@ -55,8 +64,8 @@ class ExactInOrder(BaseOrder):
     min_amount_out: Decimal = Field(gt=Decimal(0))
 
     def describe(self) -> str:
-        have_symbol = self.have_token.symbol()
-        want_symbol = self.want_token.symbol()
+        have_symbol = safe_symbol(self.have_token)
+        want_symbol = safe_symbol(self.want_token)
         return (
             f"Swap {self.amount_in:0.3f} {have_symbol} to "
             f"at least {self.min_amount_out:0.3f} {want_symbol} "
@@ -81,8 +90,8 @@ class ExactOutOrder(BaseOrder):
     amount_out: Decimal = Field(gt=Decimal(0))
 
     def describe(self) -> str:
-        have_symbol = self.have_token.symbol()
-        want_symbol = self.want_token.symbol()
+        have_symbol = safe_symbol(self.have_token)
+        want_symbol = safe_symbol(self.want_token)
         return (
             f"Swap at most {self.max_amount_in:0.3f} {have_symbol} to "
             f"{self.amount_out:0.3f} {want_symbol} "
@@ -222,7 +231,7 @@ class BasePair(ABC, ManagerAccessMixin):
     def describe(self) -> str:
         return (
             f"V{self.__class__.__module__[-1]} "
-            f"{self.token0.symbol()}/{self.token1.symbol()} "
+            f"{safe_symbol(self.token0)}/{safe_symbol(self.token1)} "
             f"{self.fee.to_decimal() * 100:0.5f}%"
         )
 

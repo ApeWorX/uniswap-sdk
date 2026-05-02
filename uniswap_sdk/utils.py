@@ -7,7 +7,7 @@ from ape_tokens import TokenInstance
 from eth_utils import to_int
 from eth_utils.address import is_checksum_address
 
-from .types import BasePair, ConvertsToToken, Fee, Route
+from .types import BasePair, ConvertsToToken, Fee, Route, safe_symbol  # noqa: F401
 
 if TYPE_CHECKING:
     pass

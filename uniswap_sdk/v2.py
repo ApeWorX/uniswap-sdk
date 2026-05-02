@@ -12,7 +12,7 @@ from ape_tokens import Token, TokenInstance
 from eth_utils import to_int
 from eth_utils.address import to_checksum_address
 
-from uniswap_sdk.utils import get_token_address, sort_tokens
+from uniswap_sdk.utils import get_token_address, safe_symbol, sort_tokens
 
 from .packages import V2, get_contract_instance
 from .types import BaseIndex, BasePair, ConvertsToToken, Fee, Route
@@ -312,7 +312,7 @@ class Pair(BasePair):
         return (
             f"<{self.__class__.__module__}.{self.__class__.__name__} "
             f"address={self.address} "
-            f"pair='{self.token0.symbol()}/{self.token1.symbol()}'>"
+            f"pair='{safe_symbol(self.token0)}/{safe_symbol(self.token1)}'>"
         )
 
     @cached_property

@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from .packages import V3, get_contract_instance
 from .types import BaseIndex, BaseLiquidity, BasePair, ConvertsToToken, Fee, Route
-from .utils import get_token_address, sort_tokens
+from .utils import get_token_address, safe_symbol, sort_tokens
 
 if TYPE_CHECKING:
     from silverback import SilverbackBot
@@ -269,7 +269,7 @@ class Pool(BasePair):
         return (
             f"<{self.__class__.__module__}.{self.__class__.__name__} "
             f"address={self.address} "
-            f"pair='{self.token0.symbol()}/{self.token1.symbol()}' fee={self.fee}>"
+            f"pair='{safe_symbol(self.token0)}/{safe_symbol(self.token1)}' fee={self.fee}>"
         )
 
     @cached_property
