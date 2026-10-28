@@ -1,6 +1,7 @@
 import itertools
+from collections.abc import Iterable, Iterator
 from decimal import Decimal
-from typing import TYPE_CHECKING, Iterable, Iterator
+from typing import TYPE_CHECKING
 
 import networkx as nx  # type: ignore[import-untyped]
 from ape.contracts import ContractInstance
@@ -52,7 +53,7 @@ class Factory(BaseIndex):
 
     def __init__(self) -> None:
         # In-memory graph index of all pairs
-        self._pair_by_address: dict[AddressType, "Pair"] = {}
+        self._pair_by_address: dict[AddressType, Pair] = {}
         self._indexed_pairs = nx.Graph()
         self._last_indexed: int = 0
 
@@ -297,7 +298,6 @@ class Pair(BasePair):
         token0: TokenInstance | AddressType | None = None,
         token1: TokenInstance | AddressType | None = None,
     ):
-
         self.address = address
         # NOTE: `None` is not supported by `BasePair`, but we override below
         super().__init__(token0=token0, token1=token1)

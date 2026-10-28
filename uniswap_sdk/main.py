@@ -1,7 +1,7 @@
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING
 
 from ape.logging import logger
 from ape.types import AddressType
@@ -105,7 +105,6 @@ class Uniswap(ManagerAccessMixin):
         bot: "SilverbackBot",
         tokens: Iterable[ConvertsToToken] | None = None,
     ):
-
         for indexer in self.indexers:
             indexer.install(bot, tokens=tokens)
 

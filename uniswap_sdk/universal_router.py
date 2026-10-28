@@ -1,6 +1,7 @@
+from collections.abc import Callable, Iterable
 from datetime import timedelta
 from itertools import cycle
-from typing import Any, Callable, ClassVar, Iterable, Type, Union
+from typing import Any, ClassVar, Union
 
 from ape.api import ReceiptAPI, TransactionAPI
 from ape.contracts import ContractInstance
@@ -125,7 +126,7 @@ def encode_path(path: tuple) -> bytes:
 
 
 def decode_path(path: bytes) -> list:
-    decoded_path: list[Union[str, int]] = []
+    decoded_path: list[str | int] = []
     decoded_type = cycle(["address", "uint24"])
     while len(path) > 0:
         t = next(decoded_type)
@@ -440,10 +441,10 @@ class APPROVE_ERC20(Command):
 
 
 # NOTE: Must come after all the subclassing action above
-ALL_COMMANDS_BY_TYPE: dict[int, Type[Command]] = {
+ALL_COMMANDS_BY_TYPE: dict[int, type[Command]] = {
     cls.type: cls for cls in Command.__subclasses__() if not cls.__name__.startswith("_")
 }
-ALL_COMMANDS_BY_NAME: dict[str, Type[Command]] = {
+ALL_COMMANDS_BY_NAME: dict[str, type[Command]] = {
     cls.__name__: cls for cls in Command.__subclasses__() if not cls.__name__.startswith("_")
 }
 
@@ -524,7 +525,7 @@ class UniversalRouter(ManagerAccessMixin):
         _, decoded_calldata = self.contract.decode_input(calldata)
         return Plan.decode(decoded_calldata["commands"], decoded_calldata["inputs"])
 
-    def decode_plan_from_transaction(self, txn: Union[str, TransactionAPI, ReceiptAPI]) -> Plan:
+    def decode_plan_from_transaction(self, txn: str | TransactionAPI | ReceiptAPI) -> Plan:
         """
         Decode any plan from a transaction object, receipt object,
         or transaction hash (that has been mined)

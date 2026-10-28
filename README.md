@@ -13,18 +13,20 @@ Ape-based SDK for working with deployments of Uniswap protocol
 You can install the latest release via [`pip`](https://pypi.org/project/pip/):
 
 ```bash
-pip install uniswap_sdk
+pip install uniswap-sdk
 ```
 
-### via `setuptools`
+### via `uv` (from source)
 
-You can clone the repository and use [`setuptools`](https://github.com/pypa/setuptools) for the most up-to-date version:
+You can clone the repository and install the editable package with [`uv`](https://docs.astral.sh/uv/):
 
 ```bash
-git clone https://github.com/SilverBackLtd/uniswap-sdk.git
+git clone https://github.com/ApeWorX/uniswap-sdk.git
 cd uniswap-sdk
-python3 setup.py install
+uv sync
 ```
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup.
 
 ## Quick Usage
 
