@@ -91,6 +91,7 @@ uni.install(bot)  # This replaces having to do `uni.index()`
 
 # NOTE: The bot will now process all swaps in the background to keep it's indexes up-to-date!
 
+
 @bot.cron("* * * * *")
 async def weth_price(t):
     # So now when you use top-level functions, it takes advantage of cached data in the index
@@ -107,6 +108,7 @@ You can override the default solver by providing a function or object which matc
 
 ```py
 from uniswap_sdk import Order
+
 Route = tuple[PairType, ...]  # 1 (or more) `PairType`s (e.g. `UniswapV2Pair`, etc.)
 Solution = dict[Route, Decimal]  # mapping of Route -> amount to swap via Route
 SolverType = Callable[[Order, Iterable[Route]], Solution]
