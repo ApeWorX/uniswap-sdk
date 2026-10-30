@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Iterator
 from decimal import Decimal
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Generic, Iterable, Iterator, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from ape.types import AddressType
 from ape.utils import ManagerAccessMixin, cached_property

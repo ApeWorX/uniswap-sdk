@@ -1,6 +1,6 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, Callable
+from typing import Any
 
 from ape.types import AddressType
 from ape_tokens import TokenInstance
@@ -8,9 +8,6 @@ from eth_utils import to_int
 from eth_utils.address import is_checksum_address
 
 from .types import BasePair, ConvertsToToken, Fee, Route, safe_symbol  # noqa: F401
-
-if TYPE_CHECKING:
-    pass
 
 
 def get_token_address(token: ConvertsToToken) -> AddressType:

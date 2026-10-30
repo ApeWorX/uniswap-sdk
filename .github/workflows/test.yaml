@@ -2,65 +2,63 @@ on: ["push", "pull_request"]
 
 name: Test
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
-    linting:
-        runs-on: ubuntu-latest
+  linting:
+    runs-on: ubuntu-latest
 
-        steps:
-        - uses: actions/checkout@v4
+    steps:
+    - uses: actions/checkout@v6
 
-        - name: Setup Python
-          uses: actions/setup-python@v5
-          with:
-            python-version: "3.10"
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        python-version: "3.10"
 
-        - name: Install Dependencies
-          run: pip install .[lint,bot]
+    - name: Run Ruff Lint
+      run: uv run --group lint ruff check .
 
-        - name: Run Black
-          run: black --check .
+    - name: Run Ruff Format
+      run: uv run --group lint ruff format --check .
 
-        - name: Run flake8
-          run: flake8 .
+    - name: Run mdformat
+      run: uv run --group lint mdformat --check *.md
 
-        - name: Run isort
-          run: isort --check-only .
+  type-check:
+    runs-on: ubuntu-latest
 
-    type-check:
-        runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
 
-        steps:
-        - uses: actions/checkout@v4
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        python-version: "3.10"
 
-        - name: Setup Python
-          uses: actions/setup-python@v5
-          with:
-            python-version: "3.10"
+    - name: Run MyPy
+      run: uv run --extra bot --group lint --group test mypy .
 
-        - name: Install Dependencies
-          run: pip install .[lint,test,bot]  # Might need test deps
+  functional:
+    runs-on: ${{ matrix.os }}
 
-        - name: Run MyPy
-          run: mypy .
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
 
-    functional:
-        runs-on: ${{ matrix.os }}
+    env:
+      GITHUB_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-        strategy:
-            matrix:
-                os: [ubuntu-latest, macos-latest]   # eventually add `windows-latest`
-                python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+    - uses: actions/checkout@v6
 
-        steps:
-        - uses: actions/checkout@v4
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        python-version: ${{ matrix.python-version }}
 
-        - name: Setup Python
-          uses: actions/setup-python@v5
-          with:
-              python-version: ${{ matrix.python-version }}
-
-        - name: Install Dependencies
-          run: pip install .[test]
-
-        - name: Run Tests
-          run: ape test -s
+    - name: Run Tests
+      run: uv run --group test ape test -m "not fuzzing" -s --cov

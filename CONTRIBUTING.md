@@ -11,23 +11,19 @@ cd uniswap-sdk
 python3 -m venv venv
 source venv/bin/activate
 
-# install brownie into the virtual environment
-python setup.py install
-
 # install the developer dependencies (-e is interactive mode)
-pip install -e .[dev]
+uv sync --group dev
 ```
 
 ## Pre-Commit Hooks
 
-We use [`pre-commit`](https://pre-commit.com/) hooks to simplify linting and ensure consistent formatting among contributors.
-Use of `pre-commit` is not a requirement, but is highly recommended.
+We use [`prek`](https://github.com/j178/prek) to run repository hooks and keep contributor workflows
+consistent. Use of `prek` is not a requirement, but is highly recommended.
 
-Install `pre-commit` locally from the root folder:
+Install hooks locally from the root folder:
 
 ```bash
-pip install pre-commit
-pre-commit install
+uv run prek install
 ```
 
 Committing will now automatically run the local hooks and ensure that your commit passes all lint checks.
@@ -46,4 +42,4 @@ A pull request represents the start of a discussion, and doesn't necessarily nee
 If you are opening a work-in-progress pull request to verify that it passes CI tests, please consider
 [marking it as a draft](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/about-pull-requests#draft-pull-requests).
 
-Join the Ethereum Python [Discord](https://discord.gg/PcEJ54yX) if you have any questions.
+Join the ApeWorX [Discord](https://discord.gg/apeworx) if you have any questions.

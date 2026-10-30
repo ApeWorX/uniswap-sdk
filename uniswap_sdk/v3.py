@@ -1,6 +1,7 @@
 import itertools
+from collections.abc import Iterable, Iterator
 from decimal import Decimal
-from typing import TYPE_CHECKING, Iterable, Iterator, cast
+from typing import TYPE_CHECKING, cast
 
 import networkx as nx  # type: ignore[import-untyped]
 from ape.contracts import ContractInstance
@@ -29,7 +30,7 @@ MAX_TICK = 887272  # price of 3.403e38
 
 class Factory(BaseIndex):
     def __init__(self) -> None:
-        self._pool_by_address: dict[AddressType, "Pool"] = {}
+        self._pool_by_address: dict[AddressType, Pool] = {}
         # NOTE: V3 allows multiple pools by fee
         self._indexed_pools = nx.MultiGraph()
         self._last_cached_block = 0

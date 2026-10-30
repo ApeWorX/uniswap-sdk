@@ -1,5 +1,5 @@
+from collections.abc import Callable, Iterable
 from decimal import Decimal
-from typing import Callable, Iterable
 
 import networkx as nx  # type: ignore[import-untyped]
 from ape.types import AddressType

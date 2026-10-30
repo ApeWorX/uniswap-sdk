@@ -122,3 +122,7 @@ version.py
 
 # Silverback stuff
 .silverback-*/
+
+# uv
+uv.lock
+.venv/
